@@ -1,0 +1,3335 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Остров</title>
+<meta name="apple-mobile-web-app-title" content="Остров">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" href="icon.png">
+<style>
+  html, body {
+    margin: 0; height: 100%; overflow: hidden; background: #0d5566;
+    font-family: -apple-system, "Trebuchet MS", sans-serif;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+    touch-action: none;
+  }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  .hud {
+    position: fixed; top: max(12px, env(safe-area-inset-top)); left: 12px; right: 64px;
+    pointer-events: none;
+  }
+  .pills { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pill {
+    background: rgba(255, 244, 214, .93); color: #3b2a14; border-radius: 999px;
+    padding: 5px 11px; font-size: 15px; font-weight: 700;
+  }
+  .pill[hidden] { display: none; }
+
+  .bars { margin-top: 9px; display: flex; flex-direction: column; gap: 5px; width: 150px; }
+  .bar { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+  .bar .track { flex: 1; height: 10px; border-radius: 6px; background: rgba(0, 0, 0, .38); overflow: hidden; }
+  .bar .fill { height: 100%; width: 100%; border-radius: 6px; }
+  .hp .fill { background: #e0533f; }
+  .food .fill { background: #e0a23a; }
+  .o2 .fill { background: #5cc8f0; }
+  body:not([data-scene="dive"]) .o2 { display: none; }
+
+  .goal {
+    margin-top: 9px; color: #fff; font-size: 14px; line-height: 1.35; max-width: 290px;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, .7);
+  }
+
+  #jbase, #jknob {
+    position: fixed; display: none; border-radius: 50%; pointer-events: none;
+    transform: translate(-50%, -50%);
+  }
+  #jbase { width: 110px; height: 110px; background: rgba(255, 255, 255, .16); border: 2px solid rgba(255, 255, 255, .4); }
+  #jknob { width: 46px; height: 46px; background: rgba(255, 255, 255, .55); }
+
+  .act {
+    position: fixed; border: 0; font-family: inherit; font-weight: 800; display: none;
+    color: #2b1d0a; -webkit-tap-highlight-color: transparent;
+  }
+  .rect { border-radius: 18px; padding: 14px 22px; font-size: 18px; }
+  #craftBtn { display: block; right: 16px; bottom: max(20px, env(safe-area-inset-bottom)); background: #e2b04a; box-shadow: 0 3px 0 #a67a22; }
+  #diveBtn, #mineBtn, #upBtn, #landBtn, #talkBtn { right: 16px; bottom: calc(max(20px, env(safe-area-inset-bottom)) + 70px); }
+  #sailBtn { right: 16px; bottom: calc(max(20px, env(safe-area-inset-bottom)) + 124px); background: #7fb6e8; box-shadow: 0 3px 0 #4a82b6; }
+  #diveBtn { background: #5cc8f0; box-shadow: 0 3px 0 #2f8fb3; }
+  #mineBtn { background: #c9a26a; box-shadow: 0 3px 0 #8f6e3d; }
+  #upBtn { background: #f3ead2; box-shadow: 0 3px 0 #b9ad92; }
+  #landBtn { background: #c9e08a; box-shadow: 0 3px 0 #8fa856; }
+  #talkBtn { background: #ffd447; box-shadow: 0 3px 0 #b8952a; }
+  body.canDive[data-scene="island"] #diveBtn { display: block; }
+  body.canMine[data-scene="island"] #mineBtn { display: block; }
+  body.canSail[data-scene="island"] #sailBtn { display: block; }
+  body.nearNpc[data-scene="island"] #talkBtn { display: block; }
+  body.nearLadder[data-scene="mine"] #upBtn { display: block; }
+  body.canLand[data-scene="sea"] #landBtn { display: block; bottom: calc(max(24px, env(safe-area-inset-bottom)) + 116px); }
+  #holdBtn { right: 16px; bottom: calc(max(24px, env(safe-area-inset-bottom)) + 170px); background: #c9b28a; box-shadow: 0 3px 0 #8f7a54; }
+  body.hasShip[data-scene="sea"] #holdBtn { display: block; }
+  body[data-scene="sea"] #attackBtn { display: block; }
+  body[data-scene="sea"] #craftBtn { display: none; }
+
+  #attackBtn {
+    right: 16px; bottom: max(24px, env(safe-area-inset-bottom));
+    width: 96px; height: 96px; border-radius: 50%; font-size: 19px;
+    background: #e2604a; color: #fff; box-shadow: 0 4px 0 #a03826;
+  }
+  #surfBtn { right: 16px; bottom: calc(max(24px, env(safe-area-inset-bottom)) + 116px); background: #f3ead2; box-shadow: 0 3px 0 #b9ad92; }
+  body[data-scene="dive"] #attackBtn, body[data-scene="dive"] #surfBtn { display: block; }
+  body.armed[data-scene="island"] #attackBtn { display: block; }
+  body[data-scene="dive"] #craftBtn { display: none; }
+  body.armed[data-scene="island"] #craftBtn { bottom: calc(max(24px, env(safe-area-inset-bottom)) + 116px); }
+  body.armed[data-scene="island"] #diveBtn, body.armed[data-scene="island"] #talkBtn { bottom: calc(max(20px, env(safe-area-inset-bottom)) + 186px); }
+  body.armed[data-scene="island"] #sailBtn { bottom: calc(max(20px, env(safe-area-inset-bottom)) + 240px); }
+
+  #eatBtn { left: 16px; bottom: max(20px, env(safe-area-inset-bottom)); background: #8fd07a; box-shadow: 0 3px 0 #5b9a48; }
+  body.hasFood #eatBtn { display: block; }
+  .act:active { transform: translateY(2px); }
+
+  .overlay {
+    position: fixed; inset: 0; background: rgba(6, 30, 38, .55);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .overlay[hidden] { display: none; }
+  .panel {
+    background: #fff4d6; color: #3b2a14; border-radius: 22px; padding: 20px;
+    width: min(88vw, 360px); box-shadow: 0 10px 30px rgba(0, 0, 0, .35);
+  }
+  .panel h2 { margin: 0 0 12px; font-size: 22px; }
+  .panel p { margin: 0 0 12px; font-size: 16px; line-height: 1.4; }
+  .recipe { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .recipe + .recipe { margin-top: 16px; }
+  .recipe .name { font-size: 18px; font-weight: 800; }
+  .recipe .need, .dneed { font-size: 14px; margin-top: 4px; color: #6b5535; }
+  .dneed { margin: 0 0 12px; line-height: 1.5; }
+  .lack { color: #b3402a; font-weight: 700; }
+  .panel button {
+    font-family: inherit; font-size: 16px; font-weight: 800; border: 0; border-radius: 14px;
+    padding: 11px 16px; background: #3f8f5a; color: #fff;
+  }
+  .panel button:disabled { background: #b9ad92; color: #f3ead2; }
+  .panel .close { display: block; margin: 16px auto 0; background: transparent; color: #6b5535; }
+
+  #actBtn { right: 16px; bottom: calc(max(20px, env(safe-area-inset-bottom)) + 124px); background: #9be37a; box-shadow: 0 3px 0 #62a044; }
+  body.hasAct[data-scene="island"] #actBtn, body.hasAct[data-scene="home"] #actBtn { display: block; }
+  #menuBtn { display: block; top: max(12px, env(safe-area-inset-top)); right: 12px; padding: 6px 14px; font-size: 20px; border-radius: 999px; background: rgba(255, 244, 214, .93); box-shadow: none; }
+  .crow { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 0; font-size: 16px; }
+  .crow.head { font-size: 13px; color: #6b5535; }
+  .crow button { padding: 6px 12px; margin-left: 4px; }
+  .panel textarea { width: 100%; box-sizing: border-box; height: 90px; margin: 10px 0; border-radius: 10px; border: 2px solid #d8c69a; padding: 8px; font-size: 12px; }
+  .panel .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .panel textarea[hidden], .panel button[hidden] { display: none; }
+  #heroBtn { display: block; top: calc(max(12px, env(safe-area-inset-top)) + 46px); right: 12px; padding: 6px 12px; font-size: 15px; border-radius: 999px; background: rgba(255, 244, 214, .93); box-shadow: none; }
+  .xp .fill { background: #a78bfa; }
+  .xpbar { height: 10px; border-radius: 6px; background: #e3d5a8; overflow: hidden; margin-bottom: 10px; }
+  .xpbar i { display: block; height: 100%; background: #8b5cf6; }
+  .crow small { color: #6b5535; font-size: 13px; }
+  #bagBtn { display: block; top: calc(max(12px, env(safe-area-inset-top)) + 92px); right: 12px; padding: 6px 12px; font-size: 15px; border-radius: 999px; background: rgba(255, 244, 214, .93); box-shadow: none; }
+  #envPill { background: rgba(20, 30, 50, .72); color: #fff; }
+  .panel h3 { font-size: 15px; color: #6b5535; }
+  #toast {
+    position: fixed; left: 50%; bottom: 26%; transform: translateX(-50%);
+    background: rgba(20, 20, 20, .78); color: #fff; padding: 10px 16px; border-radius: 14px;
+    font-size: 15px; max-width: 78vw; text-align: center; opacity: 0;
+    transition: opacity .25s; pointer-events: none;
+  }
+  #toast.show { opacity: 1; }
+  #fade { position: fixed; inset: 0; background: #06222c; opacity: 0; pointer-events: none; transition: opacity .35s; }
+  #hurt { position: fixed; inset: 0; background: rgba(200, 30, 30, .5); opacity: 0; pointer-events: none; }
+</style>
+</head>
+<body data-scene="island">
+<canvas id="c"></canvas>
+
+<div class="hud">
+  <div class="pills">
+    <div class="pill" id="envPill">☀️ День</div>
+    <div class="pill">🪵 <span id="nStick">0</span></div>
+    <div class="pill">🪨 <span id="nStone">0</span></div>
+    <div class="pill">🐟 <span id="nFish">0</span></div>
+    <div class="pill" id="pillMeat" hidden>🥩 <span id="nMeat">0</span></div>
+    <div class="pill" id="pillVeg" hidden>🥕 <span id="nVeg">0</span></div>
+    <div class="pill" id="pillSeed" hidden>🌱 <span id="nSeed">0</span></div>
+    <div class="pill" id="spearPill" hidden></div>
+    <div class="pill" id="pickPill" hidden></div>
+    <div class="pill" id="boatPill" hidden>⛵ Лодка</div>
+    <div class="pill" id="infPill" hidden>🧟 Заражение</div>
+    <div class="pill" id="chillPill" hidden>❄️ Холод</div>
+    <div class="pill" id="perkPill" hidden></div>
+  </div>
+  <div class="bars">
+    <div class="bar hp">❤️<div class="track"><div class="fill" id="hpFill"></div></div></div>
+    <div class="bar food">🍖<div class="track"><div class="fill" id="foodFill"></div></div></div>
+    <div class="bar o2">🫧<div class="track"><div class="fill" id="o2Fill"></div></div></div>
+    <div class="bar xp">✨<div class="track"><div class="fill" id="xpFill"></div></div></div>
+  </div>
+  <div class="goal" id="goal"></div>
+</div>
+
+<div id="jbase"></div><div id="jknob"></div>
+
+<button class="act rect" id="craftBtn">Крафт</button>
+<button class="act rect" id="diveBtn">Нырнуть</button>
+<button class="act rect" id="mineBtn">Копать вниз</button>
+<button class="act rect" id="upBtn">Наверх</button>
+<button class="act rect" id="sailBtn">В море</button>
+<button class="act rect" id="landBtn">Высадиться</button>
+<button class="act rect" id="talkBtn">Говорить</button>
+<button class="act" id="attackBtn">Удар</button>
+<button class="act rect" id="surfBtn">Всплыть</button>
+<button class="act rect" id="eatBtn">Поесть</button>
+<button class="act rect" id="actBtn">Действие</button>
+<button class="act rect" id="holdBtn">Трюм</button>
+<button class="act" id="menuBtn">☰</button>
+<button class="act" id="heroBtn">⭐ 1</button>
+<button class="act" id="bagBtn">🎒</button>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="panel">
+    <h2>Крафт</h2>
+    <div id="recipes"></div>
+    <button class="close" id="closeBtn">Закрыть</button>
+  </div>
+</div>
+
+<div class="overlay" id="dialog" hidden>
+  <div class="panel">
+    <h2 id="dName"></h2>
+    <p id="dText"></p>
+    <div class="dneed" id="dNeed"></div>
+    <button id="dTurn">Сдать</button>
+    <button class="close" id="dClose">Закрыть</button>
+  </div>
+</div>
+
+<div class="overlay" id="chestUI" hidden>
+  <div class="panel">
+    <h2 id="chestTitle">Сундук</h2>
+    <div id="chestRows"></div>
+    <button class="close" id="chestClose">Закрыть</button>
+  </div>
+</div>
+
+<div class="overlay" id="furnaceUI" hidden>
+  <div class="panel">
+    <h2>Печь</h2>
+    <div id="furnaceRows"></div>
+    <button class="close" id="furnaceClose">Закрыть</button>
+  </div>
+</div>
+
+<div class="overlay" id="bagUI" hidden>
+  <div class="panel">
+    <h2>Сумка</h2>
+    <div id="bagRows"></div>
+    <button class="close" id="bagClose">Закрыть</button>
+  </div>
+</div>
+
+<div class="overlay" id="heroUI" hidden>
+  <div class="panel">
+    <h2>Герой</h2>
+    <div id="heroRows"></div>
+    <button class="close" id="heroClose">Закрыть</button>
+  </div>
+</div>
+
+<div class="overlay" id="menu" hidden>
+  <div class="panel">
+    <h2>Меню</h2>
+    <p id="saveStatus"></p>
+    <div class="row">
+      <button id="saveNow">Сохранить</button>
+      <button id="showCode">Код сохранения</button>
+      <button id="openLoad">Загрузить код</button>
+    </div>
+    <textarea id="codeBox" hidden placeholder="Вставьте код сюда"></textarea>
+    <button id="applyCode" hidden>Применить код</button>
+    <button class="close" id="newGame">Новая игра</button>
+    <button class="close" id="menuClose">Закрыть</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+<div id="hurt"></div>
+<div id="fade"></div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const cv = $('c'), ctx = cv.getContext('2d');
+  let W, H, DPR;
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = innerWidth; H = innerHeight;
+    cv.width = W * DPR; cv.height = H * DPR;
+  }
+  addEventListener('resize', resize); resize();
+
+  // ---------- helpers ----------
+  let seed = 20260929;
+  function rnd() { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; }
+  function angDiff(a, b) {
+    let d = a - b;
+    while (d > Math.PI) d -= 2 * Math.PI;
+    while (d < -Math.PI) d += 2 * Math.PI;
+    return d;
+  }
+  const far = (x, y, arr, d) => arr.every(o => Math.hypot(o.x - x, o.y - y) > d);
+  function hash(tx, ty, k) {
+    let n = (tx * 374761393 + ty * 668265263 + k * 2147483647) | 0;
+    n = Math.imul(n ^ (n >>> 13), 1274126177);
+    return ((n ^ (n >>> 16)) >>> 0) / 4294967295;
+  }
+  function path(pts) {
+    ctx.beginPath();
+    pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+    ctx.closePath();
+  }
+
+  // ---------- tiers & perks ----------
+  const NAMES = ['', 'камень', 'медь', 'железо'];
+  const TIER_COL = ['', '#b0b5ba', '#d98b45', '#eef2f5'];
+  const PERKS = {
+    lung:  { title: 'Трубка для дыхания (+20 с воздуха)', emoji: '🫁' },
+    smoke: { title: 'Копчёная рыба (голод растёт медленнее)', emoji: '🍗' },
+    armor: { title: 'Кожаная броня (урон вдвое меньше)', emoji: '🛡️' },
+    crown: { title: 'Корона скелетов (урон +2)', emoji: '👑' },
+    ward: { title: 'Магический щит (урон меньше на 15%)', emoji: '🔮' },
+    cure: { title: 'Иммунитет (заражение не действует)', emoji: '💉' },
+    warm: { title: 'Тёплый плащ (холод не действует)', emoji: '🧣' }
+  };
+  const perks = { lung: false, smoke: false, armor: false, crown: false, ward: false, cure: false, warm: false };
+  let O2MAX = 40;
+  let HUNGER = 0.35;
+
+  // ---------- state ----------
+  let scene = 'island';   // 'island' | 'dive' | 'mine' | 'sea'
+  let busy = false;
+  const p = { x: 0, y: 30, aim: 0, atk: 0, cd: 0, inv: 0 };
+  const cam = { x: 0, y: 30 };
+  const inv = { stick: 0, stone: 0, fish: 0, meat: 0, veg: 0, seed: 0, copper: 0, iron: 0, gold: 0, spear: 0, pick: 0, boat: 0, hoe: 0, house: 0, ship: 0, arm: 0, am: 0, coal: 0, silver: 0, cuBar: 0, feBar: 0, agBar: 0, auBar: 0 };
+  const stats = { hp: 100, food: 100, o2: 40 };
+  let caught = false;
+  let face = 1, moving = false;
+  const SPEED = 160;
+  let savedPos = { x: 0, y: 30 };
+  let floats = [];
+  const HX = -170, HY = -40, CHX = -90, CHY = -22, FX = 80, FY = 110;
+  let restAt = 0;
+  const hero = { level: 1, xp: 0, pts: 0, vit: 0, str: 0, agi: 0, end: 0 };
+  const MAXLV = 20;
+  const XPMINE = { 2: 1, 3: 3, 4: 5, 6: 8, 7: 2, 8: 7 };
+  function xpNeed(L) { return 40 + 25 * (L - 1); }
+  function maxHp() { return 100 + hero.vit * 12; }
+  function strBonus() { return Math.floor(hero.str / 2) + (perks.crown ? 2 : 0); }
+  const bossDown = {};
+  let arrows = [];
+  let zones = [];
+  const isBoss = a => a.type === 'boss' || a.type === 'archmage' || a.type === 'rotlord' || a.type === 'queen';
+  let equip = 0;   // 0 none, 1 bronze, 2 silver, 3 anti-magic
+  let infect = 0;
+  let chill = 0;
+  const bossDownN = {};
+  // ---------- time of day & weather ----------
+  const DAY_LEN = 600;
+  let dayT = .12, dayNo = 1, weather = 'clear', wxT = 150;
+  function nightLevel() {
+    const d = dayT;
+    if (d < .55) return 0;
+    if (d < .65) return (d - .55) / .1;
+    if (d < .88) return 1;
+    if (d < .97) return 1 - (d - .88) / .09;
+    return 0;
+  }
+  function isNight() { return nightLevel() > .5; }
+  function phaseName() { return dayT < .55 ? 'День' : dayT < .65 ? 'Вечер' : dayT < .9 ? 'Ночь' : 'Рассвет'; }
+  function phaseIcon() { const n = phaseName(); return n === 'День' ? '☀️' : n === 'Вечер' ? '🌆' : n === 'Ночь' ? '🌙' : '🌅'; }
+  function envMult() { return weather === 'rain' ? 1.15 : weather === 'snow' ? .8 : 1; }
+  function advanceEnv(dt) {
+    dayT += dt / DAY_LEN;
+    if (dayT >= 1) { dayT -= 1; dayNo++; }
+    wxT -= dt;
+    if (wxT <= 0) {
+      const r = rnd(), nw = r < .5 ? 'clear' : r < .78 ? 'rain' : 'snow';
+      wxT = 150 + rnd() * 150;
+      if (nw !== weather) {
+        weather = nw;
+        if (scene === 'island' || scene === 'sea') {
+          toast(nw === 'rain' ? 'Начался дождь: на суше ходить быстрее, грядки растут быстрее.'
+            : nw === 'snow' ? 'Пошёл снег: идти тяжелее, голод растёт быстрее.' : 'Погода прояснилась.');
+        }
+      }
+    }
+  }
+  function armorMult(magic) { if (equip === 1) return .85; if (equip === 2) return .70; if (equip === 3) return magic ? .35 : .85; return 1; }
+  function armorCol() { return equip === 1 ? '#b98a55' : equip === 2 ? '#d3dae2' : equip === 3 ? '#8a6cff' : (perks.armor ? '#b98a55' : '#e8e0c8'); }
+  function spd() { return 1 + hero.agi * .03; }
+  function recalc() {
+    O2MAX = 40 + (perks.lung ? 20 : 0) + hero.end * 4;
+    HUNGER = (perks.smoke ? .2 : .35) * (1 - Math.min(.5, hero.end * .03));
+  }
+  function gainXp(n) {
+    if (hero.level >= MAXLV) return;
+    hero.xp += n;
+    while (hero.level < MAXLV && hero.xp >= xpNeed(hero.level)) {
+      hero.xp -= xpNeed(hero.level); hero.level++; hero.pts += 3;
+      stats.hp = maxHp();
+      toast('Уровень ' + hero.level + '! +3 очка героя (кнопка ⭐)');
+    }
+    if (hero.level >= MAXLV) hero.xp = 0;
+    updateHud();
+  }
+
+  function hurt(n, magic) {
+    const v = Math.max(1, Math.round(n * (perks.armor ? .5 : 1) * (perks.ward ? .85 : 1) * armorMult(magic) * (1 - Math.min(.5, hero.vit * .015))));
+    stats.hp -= v;
+    return v;
+  }
+
+  // ---------- islands ----------
+  const NPC_DEFS = {
+    gavrila: {
+      name: 'Рыбак Гаврила', col: '#c9553a', hat: '#e8d7a0', x: 40, y: 25,
+      doneText: 'Спасибо тебе, друг! Заданий пока нет, но ты всегда желанный гость.',
+      quests: [
+        { text: 'Ох, я тут совсем оголодал. Принеси 6 рыб, и я тебя отблагодарю.', need: { fish: 6 }, reward: { auBar: 1, stick: 4 } },
+        { text: 'Хочу починить сети. Нужны 8 камней и 4 медных слитка. Взамен дам трубку для ныряния.', need: { stone: 8, cuBar: 4 }, perk: 'lung' },
+        { text: 'Принеси 4 железных и 2 золотых слитка, и я сделаю тебе запас копчёной рыбы.', need: { feBar: 4, auBar: 2 }, perk: 'smoke' }
+      ]
+    },
+    nia: {
+      name: 'Путешественница Ния', col: '#3f7fbf', hat: '#7a3f2a', x: -30, y: 35,
+      doneText: 'Ты настоящий выживший! Пока у меня всё, но море большое.',
+      quests: [
+        { text: 'Мой лагерь разрушили звери. Принеси 10 палок и 6 камней, помоги отстроиться.', need: { stick: 10, stone: 6 }, reward: { auBar: 2 } },
+        { text: 'Мне нужно мясо: 4 куска. Кабаны и крабы водятся на островах Клыков и здесь.', need: { meat: 4 }, reward: { feBar: 3, auBar: 1 } },
+        { text: 'Для морской карты нужно 6 железных и 3 золотых слитка. Отдам тебе кожаную броню.', need: { feBar: 6, auBar: 3 }, perk: 'armor' }
+      ]
+    }
+  };
+  const ANIMALS = {
+    boar: { r: 17, hp: 4, speed: 55, chase: 125, dmg: 14, drop: 3, xp: 10 },
+    crab: { r: 12, hp: 2, speed: 45, chase: 105, dmg: 8, drop: 2, xp: 6 },
+    skeleton: { r: 14, hp: 5, speed: 50, chase: 110, dmg: 12, xp: 14, gold: 1, goldChance: .4 },
+    archer: { r: 13, hp: 3, speed: 45, chase: 95, dmg: 9, xp: 12, gold: 1, goldChance: .3 },
+    boss: { r: 30, hp: 60, speed: 60, chase: 105, dmg: 18, xp: 250, gold: 15, goldChance: 1, name: 'Король скелетов' },
+    mage: { r: 13, hp: 4, speed: 48, chase: 100, dmg: 14, xp: 18, gold: 1, goldChance: .4 },
+    golem: { r: 20, hp: 12, speed: 38, chase: 78, dmg: 20, xp: 22, gold: 2, goldChance: .5 },
+    archmage: { r: 26, hp: 90, speed: 55, chase: 92, dmg: 16, xp: 450, gold: 25, goldChance: 1, name: 'Архимаг' },
+    zombie: { r: 14, hp: 7, speed: 38, chase: 68, dmg: 10, xp: 16, gold: 1, goldChance: .3, infects: true },
+    runner: { r: 12, hp: 4, speed: 60, chase: 135, dmg: 8, xp: 14, gold: 1, goldChance: .25, infects: true },
+    rotlord: { r: 32, hp: 120, speed: 45, chase: 80, dmg: 20, xp: 700, gold: 30, goldChance: 1, infects: true, name: 'Повелитель гнили' },
+    ghost: { r: 13, hp: 5, speed: 55, chase: 95, dmg: 12, xp: 20, gold: 1, goldChance: .35, chills: true, ghostly: true },
+    wraith: { r: 12, hp: 4, speed: 45, chase: 90, dmg: 10, xp: 18, gold: 1, goldChance: .3 },
+    queen: { r: 30, hp: 150, speed: 60, chase: 100, dmg: 20, xp: 1000, gold: 40, goldChance: 1, chills: true, ghostly: true, name: 'Королева теней' }
+  };
+
+  function genIsland(o) {
+    const isl = {
+      id: o.id, name: o.name, cx: o.cx, cy: o.cy, base: o.base,
+      trees: [], items: [], patches: [], animals: [], npc: null,
+      danger: !!o.animals, discovered: o.id === 0,
+      maxStick: o.sticks, maxStone: o.stones, animalCfg: o.animals || null, spT: 0, minLevel: o.minLevel || 1, hint: o.hint || ''
+    };
+    isl.R = a => { let r = o.base; for (const [k, ph, am] of o.amps) r += am * Math.sin(k * a + ph); return r; };
+    isl.radiusAt = (x, y) => isl.R(Math.atan2(y, x));
+    const blob = d => {
+      const pts = [];
+      for (let i = 0; i <= 140; i++) {
+        const a = i / 140 * Math.PI * 2, r = isl.R(a) + d;
+        pts.push([Math.cos(a) * r, Math.sin(a) * r]);
+      }
+      return pts;
+    };
+    isl.shallowP = blob(95); isl.midP = blob(48); isl.sandP = blob(0); isl.grassP = blob(-55);
+    isl.maxR = o.base + o.amps.reduce((s, a) => s + a[2], 0) + 150;
+    isl.res = o.id === 0 ? [{ x: -130, y: -30, r: 125 }, { x: FX + 72, y: FY + 48, r: 135 }] : (o.boss ? [{ x: 0, y: 0, r: 120 }] : []);
+    isl.theme = o.theme || null;
+    isl.dark = !!o.dark;
+    if (o.id === 0) { isl.plots = []; for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) isl.plots.push({ x: FX + c * 48, y: FY + r * 48, state: 0, t: 0 }); }
+    if (o.npc) { const d = NPC_DEFS[o.npc]; isl.npc = { name: d.name, col: d.col, hat: d.hat, x: d.x, y: d.y, doneText: d.doneText, quests: d.quests, stage: 0 }; }
+
+    const home = o.id === 0, sep = home ? 85 : 70;
+    for (let tries = 0; isl.trees.length < o.trees && tries < 3000; tries++) {
+      const a = rnd() * Math.PI * 2, lo = home ? 100 : 60;
+      const hi = isl.R(a) - (home ? 90 : 75);
+      if (hi <= lo) continue;
+      const r = lo + rnd() * (hi - lo);
+      const x = Math.cos(a) * r, y = Math.sin(a) * r;
+      if (far(x, y, isl.trees, sep) && (!isl.npc || Math.hypot(x - isl.npc.x, y - isl.npc.y) > 80) && !inRes(isl, x, y, 0)) {
+        isl.trees.push({ x, y, lean: (rnd() - .5) * 34, ph: rnd() * 6, h: 62 + rnd() * 24, dead: !!o.dead, crystal: !!o.crystal, pale: !!o.pale });
+      }
+    }
+    for (let i = 0; i < o.patches; i++) {
+      const a = rnd() * Math.PI * 2, r = rnd() * (isl.R(a) - 90);
+      isl.patches.push({ x: Math.cos(a) * r, y: Math.sin(a) * r, r: 14 + rnd() * 26 });
+    }
+    for (let i = 0; i < o.sticks; i++) spawnItem(isl, 'stick');
+    for (let i = 0; i < o.stones; i++) spawnItem(isl, 'stone');
+    for (let i = 0; i < (o.nuggets || 0); i++) spawnItem(isl, 'gold');
+    if (o.animals) for (const type in o.animals) for (let i = 0; i < o.animals[type]; i++) { const an = makeAnimal(isl, type, null); if (an) isl.animals.push(an); }
+    isl.bossType = o.boss ? (o.boss === true ? 'boss' : o.boss) : null;
+    return isl;
+  }
+  function inRes(I, x, y, m) { return I.res.some(r => Math.hypot(x - r.x, y - r.y) < r.r + m); }
+  function spawnItem(isl, type) {
+    for (let i = 0; i < 300; i++) {
+      const a = rnd() * Math.PI * 2;
+      const lo = type === 'stone' ? isl.R(a) - 140 : 40, hi = isl.R(a) - 25;
+      if (hi <= lo) continue;
+      const r = lo + rnd() * (hi - lo);
+      const x = Math.cos(a) * r, y = Math.sin(a) * r;
+      const okNpc = (!isl.npc || Math.hypot(x - isl.npc.x, y - isl.npc.y) > 45) && !inRes(isl, x, y, 20);
+      const okP = isl !== curIsl() || Math.hypot(x - p.x, y - p.y) > 60;
+      if (okNpc && okP && far(x, y, isl.trees, 36) && far(x, y, isl.items, 32)) {
+        isl.items.push({ type, x, y, rot: rnd() * 3 });
+        return;
+      }
+    }
+  }
+  function makeAnimal(isl, type, avoid) {
+    const T = ANIMALS[type];
+    for (let i = 0; i < 80; i++) {
+      const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * (isl.R(a) - 70);
+      const x = Math.cos(a) * r, y = Math.sin(a) * r;
+      if (isl.npc && Math.hypot(x - isl.npc.x, y - isl.npc.y) < 220) continue;
+      if (avoid && Math.hypot(x - avoid.x, y - avoid.y) < 260) continue;
+      if (!far(x, y, isl.trees, 30)) continue;
+      const ang = rnd() * 7;
+      return { type, r: T.r, hp: T.hp, maxhp: T.hp, speed: T.speed, chase: T.chase, dmg: T.dmg, drop: T.drop || 0,
+               xp: T.xp || 5, gold: T.gold || 0, goldChance: T.goldChance == null ? 1 : T.goldChance, infects: !!T.infects, chills: !!T.chills, ghostly: !!T.ghostly, phT: rnd() * 3, solid: false,
+               shootCd: rnd() * 2, slam: 0, slamCd: 0, sumT: 6, phase2: false, asleep: false, blinkCd: 2 + rnd() * 3, ringCd: 3, meteorCd: 4,
+               x, y, ang, tang: ang, tt: rnd() * 2, cd: 0, hitT: 0, vx: 0, vy: 0, ph: rnd() * 6, chasing: false };
+    }
+    return null;
+  }
+
+  const islands = [];
+  let isl = null;
+  function curIsl() { return isl; }
+
+  islands.push(genIsland({ id: 0, name: 'Ваш остров', cx: 0, cy: 0, base: 520,
+    amps: [[3, 1, 55], [5, 2, 35], [9, 0, 20]], trees: 32, patches: 70, sticks: 18, stones: 14 }));
+  isl = islands[0];
+  islands.push(genIsland({ id: 1, name: 'Остров Гаврилы', cx: 1750, cy: -350, base: 230,
+    amps: [[3, .5, 25], [5, 1.7, 15], [7, 2.2, 10]], trees: 10, patches: 22, sticks: 8, stones: 6, npc: 'gavrila' }));
+  islands.push(genIsland({ id: 2, name: 'Остров Клыков', cx: -1500, cy: 1250, base: 300,
+    amps: [[3, 2, 30], [4, .4, 20], [8, 1, 12]], trees: 12, patches: 28, sticks: 14, stones: 8, nuggets: 3, minLevel: 2,
+    animals: { boar: 4, crab: 3 } }));
+  islands.push(genIsland({ id: 3, name: 'Остров Нии', cx: 250, cy: -2200, base: 330,
+    amps: [[3, 1.2, 30], [5, .3, 20], [9, 2, 10]], trees: 14, patches: 30, sticks: 10, stones: 8, npc: 'nia', minLevel: 3,
+    animals: { crab: 4, boar: 2 } }));
+  islands.push(genIsland({ id: 4, name: 'Остров Скелетов', cx: -2300, cy: -900, base: 340,
+    amps: [[3, .8, 30], [4, 1.9, 22], [7, 2.5, 12]], trees: 12, patches: 26, sticks: 8, stones: 8, nuggets: 4, minLevel: 5,
+    animals: { skeleton: 5, archer: 3 }, boss: true, dead: true,
+    theme: { sh: '#2b6670', mid: '#3c8590', sand: '#c9c0a6', grass: '#52703f', patch: 'rgba(25,45,30,.4)' } }));
+  islands.push(genIsland({ id: 5, name: 'Остров Магов', cx: 2400, cy: 900, base: 350,
+    amps: [[3, 1.6, 28], [5, .9, 20], [8, 2.2, 12]], trees: 12, patches: 26, sticks: 8, stones: 8, nuggets: 4, minLevel: 8,
+    animals: { mage: 4, golem: 3 }, boss: 'archmage', crystal: true,
+    theme: { sh: '#3b4f8c', mid: '#5a76bd', sand: '#d9cfe9', grass: '#5d4f9a', patch: 'rgba(40,20,90,.35)' } }));
+  islands.push(genIsland({ id: 6, name: 'Остров Зомби', cx: 300, cy: 2900, base: 350,
+    amps: [[3, .4, 28], [5, 2.4, 20], [8, 1.1, 12]], trees: 14, patches: 30, sticks: 8, stones: 8, nuggets: 4, minLevel: 11,
+    animals: { zombie: 7, runner: 3 }, boss: 'rotlord', dead: true,
+    theme: { sh: '#2f5b4a', mid: '#477b5d', sand: '#a99f73', grass: '#4a5a2f', patch: 'rgba(25,35,15,.4)' } }));
+  islands.push(genIsland({ id: 7, name: 'Остров Призраков', cx: -2250, cy: 2250, base: 350,
+    amps: [[3, 2.1, 28], [4, .6, 20], [7, 1.4, 12]], trees: 12, patches: 26, sticks: 8, stones: 8, nuggets: 4, minLevel: 14,
+    animals: { ghost: 6, wraith: 3 }, boss: 'queen', dead: true, pale: true, dark: true,
+    hint: 'Остров во мгле. Призраки неуязвимы, пока полупрозрачны: бейте их, когда они становятся плотными.',
+    theme: { sh: '#3a5a78', mid: '#5d86a8', sand: '#cfd8e2', grass: '#7a8aa6', patch: 'rgba(60,70,110,.35)' } }));
+
+  setInterval(() => {
+    if (scene !== 'island') return;
+    if (isl.items.filter(i => i.type === 'stick').length < isl.maxStick) spawnItem(isl, 'stick');
+    if (isl.items.filter(i => i.type === 'stone').length < isl.maxStone) spawnItem(isl, 'stone');
+  }, 12000);
+
+  // dive state
+  const ARENA = 780;
+  const DSPEED = 125;
+  const diver = { x: 0, y: 0, vx: 0, vy: 0, aim: 0, atk: 0, cd: 0, inv: 0 };
+  let creatures = [], deco = null, bubbles = [];
+  let bubT = 0;
+  const spawnT = { small: 0, big: 0, jelly: 0 };
+  const TYPES = {
+    small: { r: 10, hp: 1, speed: 55, food: 1 },
+    big:   { r: 19, hp: 3, speed: 42, food: 3 },
+    jelly: { r: 17, hp: 2, speed: 40, food: 0 }
+  };
+  const TARGET = { small: 14, big: 5, jelly: 4 };
+  const EVERY = { small: 5, big: 12, jelly: 14 };
+
+  // mine state
+  const TS = 44, GW = 41, GH = 41, LX = 20, LY = 20;
+  const REQ = { 1: 0, 2: 1, 3: 1, 4: 2, 5: 99, 6: 3, 7: 1, 8: 2 };
+  const BASE = { 1: .3, 2: .7, 3: 1, 4: 1.4, 6: 1.8, 7: .9, 8: 1.6 };
+  let grid = null, seen = null;
+  const miner = { x: 0, y: 0, aim: 0, moving: false, mining: false };
+  let mineTgt = null, mineProg = 0, debris = [];
+
+  // sea state
+  const SEA_R = 3800, BSPEED = 230;
+  const boat = { x: 0, y: 0, vx: 0, vy: 0, ang: 0 };
+  let landTarget = null;
+
+  // ---------- HUD ----------
+  let toastT;
+  function toast(msg) {
+    const el = $('toast'); el.textContent = msg; el.classList.add('show');
+    clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), 2600);
+  }
+  function questsLeft() { return islands.some(I => I.npc && I.npc.stage < I.npc.quests.length); }
+  function goalText() {
+    if (!inv.spear) return 'Соберите палку и камень, затем сделайте копьё в меню «Крафт».';
+    if (!caught) return 'Зайдите в воду поглубже и нажмите «Нырнуть». Добудьте рыбу копьём.';
+    if (!inv.pick) return 'Сделайте кирку в «Крафте» (2 палки и 3 камня), затем копайте вниз на суше.';
+    if (!inv.house) return 'Постройте дом в «Крафте» (20 палок, 12 камней): внутри печь, кровать и сундук.';
+    if (inv.pick < 2 || inv.spear < 2) return 'Копайте медь и уголь в шахте, плавьте руду в печи дома и улучшайте копьё и кирку.';
+    if (!inv.boat) return 'Постройте лодку (10 палок и 4 медных слитка) и плывите на другие острова: там другая руда.';
+    if (questsLeft()) return 'На других островах руда своя: железо, серебро, золото. А ещё NPC с заданиями.';
+    if (!inv.hoe) return 'Сделайте мотыгу в «Крафте» и заведите огород.';
+    if (!inv.ship) return 'Постройте железный корабль (25 палок, 12 железных и 2 золотых слитка): с пушкой океан безопаснее.';
+    if (!bossDown[4]) return 'Остров Скелетов (нужен ур. 5): победите Короля скелетов. Качайте героя кнопкой ⭐.';
+    if (!bossDown[5]) return 'Остров Магов (нужен ур. 8): победите Архимага. Качайте героя кнопкой ⭐.';
+    if (!bossDown[6]) return 'Остров Зомби (нужен ур. 11): победите Повелителя гнили. Заражение лечат овощи.';
+    if (!bossDown[7]) return 'Остров Призраков (нужен ур. 14): победите Королеву теней. Призраки уязвимы, только когда не просвечивают.';
+    if (![4, 5, 6, 7].every(i => bossDownN[i])) return 'Ночью на островах просыпаются другие, более сильные боссы. Победите их: за каждого +3 очка героя.';
+    return 'Вы прошли всё! Дальше можно придумать новые острова и приключения.';
+  }
+  function updateHud() {
+    $('nStick').textContent = inv.stick;
+    $('nStone').textContent = inv.stone;
+    $('nFish').textContent = inv.fish;
+    $('nMeat').textContent = inv.meat; $('pillMeat').hidden = !inv.meat;
+    $('nVeg').textContent = inv.veg; $('pillVeg').hidden = !inv.veg;
+    $('nSeed').textContent = inv.seed; $('pillSeed').hidden = !inv.seed;
+    $('spearPill').hidden = !inv.spear; $('spearPill').textContent = 'Копьё: ' + NAMES[inv.spear];
+    $('pickPill').hidden = !inv.pick; $('pickPill').textContent = 'Кирка: ' + NAMES[inv.pick];
+    $('boatPill').hidden = !inv.boat; $('boatPill').textContent = inv.ship ? '🚢 Корабль' : '⛵ Лодка';
+    const pk = Object.keys(perks).filter(k => perks[k]).map(k => PERKS[k].emoji).join(' ');
+    $('perkPill').hidden = !pk; $('perkPill').textContent = pk;
+    $('goal').textContent = goalText();
+    document.body.classList.toggle('hasFood', inv.fish + inv.meat + inv.veg > 0);
+    updateHeroBtn();
+  }
+  function updateBars() {
+    $('hpFill').style.width = Math.max(0, stats.hp / maxHp() * 100) + '%';
+    $('infPill').hidden = infect <= 0;
+    const ep = phaseIcon() + ' ' + phaseName() + (weather === 'rain' ? ' · 🌧️' : weather === 'snow' ? ' · ❄️' : '');
+    if ($('envPill').textContent !== ep) $('envPill').textContent = ep;
+    $('chillPill').hidden = chill <= 0;
+    $('xpFill').style.width = (hero.level >= MAXLV ? 100 : Math.min(100, hero.xp / xpNeed(hero.level) * 100)) + '%';
+    $('foodFill').style.width = Math.max(0, stats.food) + '%';
+    $('o2Fill').style.width = Math.max(0, stats.o2 / O2MAX * 100) + '%';
+  }
+  const OVERLAYS = ['overlay', 'dialog', 'chestUI', 'menu', 'heroUI', 'furnaceUI', 'bagUI'];
+  const uiOpen = () => OVERLAYS.some(id => !$(id).hidden);
+
+  // ---------- crafting ----------
+  const TOOLS = [
+    { key: 'spear', names: ['', 'Копьё', 'Медное копьё', 'Железное копьё'],
+      costs: [null, { stick: 1, stone: 1 }, { stick: 1, cuBar: 3 }, { stick: 1, feBar: 3 }] },
+    { key: 'pick', names: ['', 'Кирка', 'Медная кирка', 'Железная кирка'],
+      costs: [null, { stick: 2, stone: 3 }, { stick: 2, cuBar: 4 }, { stick: 2, feBar: 5 }] },
+    { key: 'boat', names: ['', 'Лодка'], costs: [null, { stick: 10, cuBar: 4 }], done: 'Уже построена' },
+    { key: 'hoe', names: ['', 'Мотыга'], costs: [null, { stick: 2, stone: 2 }], done: 'Уже есть' },
+    { key: 'house', names: ['', 'Дом'], costs: [null, { stick: 20, stone: 12 }], done: 'Уже построен' },
+    { key: 'ship', names: ['', 'Железный корабль'], costs: [null, { stick: 25, feBar: 12, auBar: 2 }], done: 'Уже построен', needs: 'boat' },
+    { key: 'arm', names: ['', 'Бронзовая броня', 'Серебряная броня'], costs: [null, { cuBar: 8, stone: 4 }, { agBar: 8, feBar: 4 }] }
+  ];
+  const RES = { stick: 'Палки', stone: 'Камни', coal: 'Уголь', copper: 'Медная руда', iron: 'Железная руда', silver: 'Серебряная руда', gold: 'Золотая руда', cuBar: 'Медные слитки', feBar: 'Железные слитки', agBar: 'Серебряные слитки', auBar: 'Золотые слитки', fish: 'Рыба', meat: 'Мясо', veg: 'Овощи', seed: 'Семена' };
+  function renderCraft() {
+    let html = '';
+    for (const T of TOOLS) {
+      if (T.needs && !inv[T.needs]) { html += `<div class="recipe"><div><div class="name">${T.names[1]}</div><div class="need">Сначала постройте лодку</div></div></div>`; continue; }
+      const nxt = inv[T.key] + 1;
+      if (nxt >= T.names.length) {
+        html += `<div class="recipe"><div><div class="name">${T.names[T.names.length - 1]}</div><div class="need">${T.done || 'Лучший уровень'}</div></div></div>`;
+        continue;
+      }
+      const cost = T.costs[nxt]; let ok = true; const parts = [];
+      for (const r in cost) {
+        const have = inv[r];
+        if (have < cost[r]) ok = false;
+        parts.push(`<span class="${have >= cost[r] ? '' : 'lack'}">${RES[r]} ${Math.min(have, cost[r])}/${cost[r]}</span>`);
+      }
+      html += `<div class="recipe"><div><div class="name">${T.names[nxt]}</div><div class="need">${parts.join(' · ')}</div></div><button data-key="${T.key}" ${ok ? '' : 'disabled'}>Сделать</button></div>`;
+    }
+    $('recipes').innerHTML = html;
+  }
+  function craft(key) {
+    const T = TOOLS.find(x => x.key === key);
+    const nxt = inv[key] + 1, cost = T.costs[nxt];
+    if (!cost) return;
+    for (const r in cost) if (inv[r] < cost[r]) return;
+    for (const r in cost) inv[r] -= cost[r];
+    inv[key] = nxt;
+    if (key === 'arm' && equip !== 3) equip = inv.arm;
+    gainXp(10);
+    if (key === 'hoe') inv.seed += 3;
+    updateHud(); renderCraft();
+    const READY = { spear: 'готово', pick: 'готова', boat: 'готова', hoe: 'готова', house: 'готов', ship: 'готов', arm: 'готова' };
+    toast(key === 'hoe' ? 'Мотыга готова! Вы нашли 3 семечка. Огород на вашем острове, у ограды.'
+      : key === 'ship' ? 'Железный корабль готов! В море появились пушка и трюм.'
+      : key === 'house' ? 'Дом построен! Зайдите внутрь (кнопка «Войти»): там кровать, печь для плавки и сундук.'
+      : T.names[nxt] + ' ' + READY[key] + '!');
+  }
+  $('recipes').addEventListener('click', e => {
+    const b = e.target.closest('button[data-key]');
+    if (b && !b.disabled) craft(b.dataset.key);
+  });
+  $('craftBtn').addEventListener('click', () => { renderCraft(); $('overlay').hidden = false; });
+  $('closeBtn').addEventListener('click', () => { $('overlay').hidden = true; });
+
+  // ---------- NPC dialog ----------
+  let talkNpc = null;
+  const canTurn = q => Object.keys(q.need).every(k => inv[k] >= q.need[k]);
+  function renderDialog() {
+    const n = talkNpc, q = n.quests[n.stage];
+    $('dName').textContent = n.name;
+    if (!q) {
+      $('dText').textContent = n.doneText; $('dNeed').innerHTML = ''; $('dTurn').style.display = 'none';
+      return;
+    }
+    $('dText').textContent = q.text;
+    const need = Object.keys(q.need).map(k => `<span class="${inv[k] >= q.need[k] ? '' : 'lack'}">${RES[k]} ${Math.min(inv[k], q.need[k])}/${q.need[k]}</span>`).join(' · ');
+    let rew = '';
+    if (q.perk) rew = PERKS[q.perk].title;
+    else rew = Object.keys(q.reward).map(k => `${RES[k]} ×${q.reward[k]}`).join(', ');
+    $('dNeed').innerHTML = `Нужно: ${need}<br>Награда: ${rew}`;
+    $('dTurn').style.display = 'inline-block';
+    $('dTurn').disabled = !canTurn(q);
+  }
+  function openDialog() {
+    if (busy || !isl.npc) return;
+    talkNpc = isl.npc; renderDialog(); $('dialog').hidden = false;
+  }
+  $('talkBtn').addEventListener('click', openDialog);
+  $('dClose').addEventListener('click', () => { $('dialog').hidden = true; });
+  $('dTurn').addEventListener('click', () => {
+    const n = talkNpc, q = n && n.quests[n.stage];
+    if (!q || !canTurn(q)) return;
+    for (const k in q.need) inv[k] -= q.need[k];
+    if (q.perk) {
+      perks[q.perk] = true;
+      recalc();
+    } else for (const k in q.reward) inv[k] += q.reward[k];
+    n.stage++;
+    updateHud(); renderDialog();
+    toast('Задание выполнено!');
+    gainXp(30 + 10 * (n.stage - 1));
+  });
+  updateHud();
+
+  function hurtFlash() {
+    const h = $('hurt');
+    h.style.transition = 'none'; h.style.opacity = '.55';
+    setTimeout(() => { h.style.transition = 'opacity .5s'; h.style.opacity = '0'; }, 30);
+  }
+
+  // ---------- scene transitions ----------
+  function transition(fn) {
+    if (busy) return;
+    busy = true;
+    joy.active = false; joy.dx = joy.dy = 0;
+    $('jbase').style.display = $('jknob').style.display = 'none';
+    OVERLAYS.forEach(id => { $(id).hidden = true; });
+    $('fade').style.opacity = 1;
+    setTimeout(() => {
+      floats = [];
+      fn();
+      $('fade').style.opacity = 0;
+      busy = false;
+    }, 380);
+  }
+  function setScene(s) {
+    scene = s; document.body.dataset.scene = s;
+    if (s !== 'island') { arrows = []; zones = []; }
+    document.body.classList.remove('canDive', 'canMine', 'nearLadder', 'canSail', 'canLand', 'nearNpc', 'armed', 'hasAct', 'hasShip');
+  }
+  function backToIsland(x, y) {
+    setScene('island');
+    p.x = x; p.y = y; cam.x = x; cam.y = y;
+    stats.o2 = O2MAX;
+  }
+
+  // ----- dive -----
+  function genDeco() {
+    const d = { rocks: [], weeds: [], corals: [], sand: [] };
+    const pt = () => { const a = rnd() * 7, r = Math.sqrt(rnd()) * ARENA * .96; return [Math.cos(a) * r, Math.sin(a) * r]; };
+    for (let i = 0; i < 26; i++) { const [x, y] = pt(); d.rocks.push({ x, y, rx: 12 + rnd() * 24, ry: 9 + rnd() * 16, rot: rnd() * 3 }); }
+    for (let i = 0; i < 50; i++) { const [x, y] = pt(); d.weeds.push({ x, y, ph: rnd() * 6, s: .8 + rnd() * .8 }); }
+    const cols = ['#ff7f7f', '#ffb04d', '#e879c4', '#f2d95c'];
+    for (let i = 0; i < 18; i++) { const [x, y] = pt(); d.corals.push({ x, y, c: cols[Math.floor(rnd() * cols.length)], n: 5 + Math.floor(rnd() * 4) }); }
+    for (let i = 0; i < 34; i++) { const [x, y] = pt(); d.sand.push({ x, y, r: 35 + rnd() * 70 }); }
+    return d;
+  }
+  function makeCreature(type) {
+    const T = TYPES[type];
+    for (let i = 0; i < 60; i++) {
+      const a = rnd() * 7, r = Math.sqrt(rnd()) * (ARENA - 60);
+      const x = Math.cos(a) * r, y = Math.sin(a) * r;
+      if (Math.hypot(x - diver.x, y - diver.y) > 220) {
+        const ang = rnd() * 7;
+        return { type, r: T.r, hp: T.hp, maxhp: T.hp, speed: T.speed, food: T.food,
+                 x, y, ang, tang: ang, tt: rnd() * 2, fl: 0, hitT: 0, ph: rnd() * 6, vx: 0, vy: 0 };
+      }
+    }
+    return null;
+  }
+  function enterDive() {
+    if (busy || scene !== 'island') return;
+    if (!inv.spear) { toast('Без копья под водой делать нечего.'); return; }
+    transition(() => {
+      savedPos = { x: p.x, y: p.y };
+      setScene('dive');
+      deco = genDeco();
+      diver.x = 0; diver.y = 0; diver.vx = diver.vy = 0; diver.aim = 0; diver.atk = 0; diver.cd = 0; diver.inv = 0;
+      creatures = [];
+      for (const type of Object.keys(TARGET)) for (let i = 0; i < TARGET[type]; i++) { const c = makeCreature(type); if (c) creatures.push(c); }
+      bubbles = [];
+      stats.o2 = O2MAX;
+      cam.x = 0; cam.y = 0;
+      toast('Подплывайте к рыбе и жмите «Удар». Медузы жалят!');
+    });
+  }
+  function surface() {
+    if (busy || scene !== 'dive') return;
+    transition(() => backToIsland(savedPos.x, savedPos.y));
+  }
+
+  // ----- mine -----
+  const MINE_ORES = {
+    0: [[3, 16, 5, 17, [3, 6]], [7, 10, 4, 16, [2, 5]]],
+    1: [[4, 14, 6, 18, [3, 6]], [7, 8, 4, 16, [2, 5]]],
+    2: [[8, 12, 6, 18, [3, 5]], [4, 8, 6, 16, [3, 5]]],
+    3: [[6, 12, 7, 19, [3, 5]], [8, 8, 6, 16, [3, 5]]]
+  };
+  const STONE_COL = ['#7c858b', '#8a817a', '#6f8190', '#7b7f9c'];
+  let mines = {}, curMine = 0;
+  function genMine(id) {
+    const g = new Uint8Array(GW * GH), sn = new Uint8Array(GW * GH);
+    for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
+      if (x === 0 || y === 0 || x === GW - 1 || y === GH - 1) { g[y * GW + x] = 5; continue; }
+      const d = Math.hypot(x - LX, y - LY);
+      g[y * GW + x] = d < 7 ? (rnd() < .12 ? 2 : 1) : (rnd() < .15 ? 1 : 2);
+    }
+    const vein = (type, count, dmin, dmax, size) => {
+      for (let i = 0; i < count; i++) {
+        let x = 0, y = 0, tries = 0;
+        do {
+          const a = rnd() * 7, d = dmin + rnd() * (dmax - dmin);
+          x = Math.round(LX + Math.cos(a) * d); y = Math.round(LY + Math.sin(a) * d); tries++;
+        } while ((x < 2 || y < 2 || x > GW - 3 || y > GH - 3) && tries < 40);
+        const n = size[0] + Math.floor(rnd() * (size[1] - size[0] + 1));
+        for (let j = 0; j < n; j++) {
+          if (x > 0 && y > 0 && x < GW - 1 && y < GH - 1) g[y * GW + x] = type;
+          x += Math.floor(rnd() * 3) - 1; y += Math.floor(rnd() * 3) - 1;
+        }
+      }
+    };
+    for (const o of (MINE_ORES[id] || [])) vein(o[0], o[1], o[2], o[3], o[4]);
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) g[(LY + dy) * GW + LX + dx] = 0;
+    mines[id] = { g, s: sn };
+    return mines[id];
+  }
+  const tileAt = (tx, ty) => (tx < 0 || ty < 0 || tx >= GW || ty >= GH) ? 5 : grid[ty * GW + tx];
+  const solidAt = (px, py) => tileAt(Math.floor(px / TS), Math.floor(py / TS)) !== 0;
+  function collides(x, y) {
+    const r = 13;
+    return solidAt(x - r, y - r) || solidAt(x + r, y - r) || solidAt(x - r, y + r) || solidAt(x + r, y + r);
+  }
+  function enterMine() {
+    if (busy || scene !== 'island') return;
+    if (!inv.pick) { toast('Нужна кирка. Сделайте её в «Крафте».'); return; }
+    transition(() => {
+      savedPos = { x: p.x, y: p.y };
+      setScene('mine');
+      const mn = mines[isl.id] || genMine(isl.id); grid = mn.g; seen = mn.s; curMine = isl.id;
+      miner.x = (LX + .5) * TS; miner.y = (LY + .5) * TS; miner.aim = Math.PI / 2;
+      cam.x = miner.x; cam.y = miner.y;
+      mineTgt = null; mineProg = 0; debris = [];
+      stats.o2 = O2MAX;
+      toast('Упритесь в стену, чтобы копать. Здесь можно найти: ' + ({ 0: 'медь и уголь', 1: 'железо и уголь', 2: 'серебро и железо', 3: 'золото и серебро' }[isl.id] || 'руду') + '.');
+    });
+  }
+  function leaveMine() {
+    if (busy || scene !== 'mine') return;
+    transition(() => backToIsland(savedPos.x, savedPos.y));
+  }
+
+  // ----- sea -----
+  function sail() {
+    if (busy || scene !== 'island' || !inv.boat) return;
+    transition(() => {
+      const a = Math.atan2(p.y, p.x), r = isl.R(a) + 90;
+      boat.x = isl.cx + Math.cos(a) * r; boat.y = isl.cy + Math.sin(a) * r;
+      boat.vx = boat.vy = 0; boat.ang = a; boat.cd = 0; boat.atk = 0;
+      seaMobs = []; balls = []; puffs = []; seaSp.shark = 0; seaSp.kraken = 0;
+      setScene('sea');
+      cam.x = boat.x; cam.y = boat.y;
+      toast(inv.ship ? 'Корабль: пушка стреляет вперёд кнопкой «Пушка». Берегитесь акул и кракена!' : 'Ведите лодку джойстиком. В воде водятся акулы: отбиваться можно только копьём.');
+    });
+  }
+  function land() {
+    if (busy || scene !== 'sea' || !landTarget) return;
+    const I = landTarget;
+    if (hero.level < I.minLevel) { toast('Слишком опасно. Нужен уровень героя: ' + I.minLevel + '.'); return; }
+    transition(() => {
+      const a = Math.atan2(boat.y - I.cy, boat.x - I.cx), r = I.R(a) - 25;
+      isl = I;
+      backToIsland(Math.cos(a) * r, Math.sin(a) * r);
+      p.inv = 1.5;
+      for (const b of I.animals.filter(isBoss)) { b.asleep = true; b.chasing = false; b.hp = b.maxhp; b.x = 0; b.y = 0; b.phase2 = false; b.slam = 0; b.solid = true; }
+      syncBosses(I);
+      if (I.npc) toast('На острове кто-то есть. Подойдите и нажмите «Говорить».');
+      else if (I.danger) toast(I.hint || 'Осторожно: на острове опасные звери! Копьё бьёт кнопкой «Удар».');
+    });
+  }
+  function faint() {
+    if (busy) return;
+    transition(() => {
+      isl = islands[0];
+      backToIsland(0, 30);
+      stats.hp = Math.round(maxHp() * .6); stats.food = Math.max(stats.food, 40);
+      inv.fish = Math.floor(inv.fish / 2); inv.meat = Math.floor(inv.meat / 2); infect = 0; chill = 0;
+      updateHud();
+      toast('Вы потеряли сознание. Вас нашли на родном берегу.');
+    });
+  }
+  function eat() {
+    if (busy || inv.fish + inv.meat + inv.veg <= 0) return;
+    if (infect > 0 && inv.veg > 0) { inv.veg--; infect = 0; stats.food = Math.min(100, stats.food + 14); toast('Овощи вылечили заражение.'); updateHud(); return; }
+    if (stats.food >= 97) { toast('Вы не голодны.'); return; }
+    if (inv.veg > 0) { inv.veg--; stats.food = Math.min(100, stats.food + 14); toast('Вы съели овощи.'); }
+    else if (inv.fish > 0) { inv.fish--; stats.food = Math.min(100, stats.food + 22); toast('Вы съели рыбу.'); }
+    else { inv.meat--; stats.food = Math.min(100, stats.food + 30); toast('Вы съели мясо.'); }
+    updateHud();
+  }
+  $('diveBtn').addEventListener('click', enterDive);
+  $('mineBtn').addEventListener('click', enterMine);
+  $('upBtn').addEventListener('click', leaveMine);
+  $('sailBtn').addEventListener('click', sail);
+  $('landBtn').addEventListener('click', land);
+  $('surfBtn').addEventListener('click', surface);
+  $('eatBtn').addEventListener('click', eat);
+  $('attackBtn').addEventListener('pointerdown', e => { e.preventDefault(); attack(); });
+
+  // ---------- input ----------
+  const joy = { active: false, id: null, ox: 0, oy: 0, dx: 0, dy: 0 };
+  const base = $('jbase'), knob = $('jknob');
+  addEventListener('pointerdown', e => {
+    if (e.target.closest('button, .panel') || uiOpen() || joy.active || busy) return;
+    joy.active = true; joy.id = e.pointerId; joy.ox = e.clientX; joy.oy = e.clientY; joy.dx = joy.dy = 0;
+    base.style.display = knob.style.display = 'block';
+    base.style.left = knob.style.left = joy.ox + 'px';
+    base.style.top = knob.style.top = joy.oy + 'px';
+  });
+  addEventListener('pointermove', e => {
+    if (!joy.active || e.pointerId !== joy.id) return;
+    let dx = e.clientX - joy.ox, dy = e.clientY - joy.oy;
+    const m = Math.hypot(dx, dy), max = 50;
+    if (m > max) { dx = dx / m * max; dy = dy / m * max; }
+    joy.dx = dx / max; joy.dy = dy / max;
+    knob.style.left = (joy.ox + dx) + 'px'; knob.style.top = (joy.oy + dy) + 'px';
+  });
+  function endJoy(e) {
+    if (e.pointerId !== joy.id) return;
+    joy.active = false; joy.dx = joy.dy = 0;
+    base.style.display = knob.style.display = 'none';
+  }
+  addEventListener('pointerup', endJoy);
+  addEventListener('pointercancel', endJoy);
+
+  const keys = {};
+  addEventListener('keydown', e => {
+    const k = e.key.toLowerCase();
+    if (!keys[k]) {
+      if (k === ' ' || k === 'e') attack();
+      if (k === 'f') eat();
+    }
+    keys[k] = true;
+  });
+  addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+  function readInput() {
+    let vx = joy.dx, vy = joy.dy;
+    if (keys['a'] || keys['arrowleft']) vx -= 1;
+    if (keys['d'] || keys['arrowright']) vx += 1;
+    if (keys['w'] || keys['arrowup']) vy -= 1;
+    if (keys['s'] || keys['arrowdown']) vy += 1;
+    const len = Math.hypot(vx, vy);
+    if (len > 1) { vx /= len; vy /= len; }
+    return { vx, vy, len: Math.min(len, 1) };
+  }
+
+  function updateFloats(dt) {
+    for (let i = floats.length - 1; i >= 0; i--) {
+      const f = floats[i]; f.life -= dt; f.y -= dt * 30;
+      if (f.life <= 0) floats.splice(i, 1);
+    }
+  }
+
+  // ---------- attacks ----------
+  function attack() {
+    if (busy || uiOpen()) return;
+    if (scene === 'dive') attackDive();
+    else if (scene === 'island' && isl.danger && inv.spear) attackLand();
+    else if (scene === 'sea') attackSea();
+  }
+  function attackLand() {
+    if (p.cd > 0) return;
+    p.cd = .45; p.atk = .25;
+    const dmg = Math.max(1, inv.spear) + strBonus();
+    for (let i = isl.animals.length - 1; i >= 0; i--) {
+      const a = isl.animals[i];
+      const dx = a.x - p.x, dy = a.y - p.y, d = Math.hypot(dx, dy) || 1;
+      if (a.ghostly && !a.solid) continue;
+      if (d > 78 + a.r) continue;
+      const near = d < 34 + a.r;
+      if (!near && Math.abs(angDiff(Math.atan2(dy, dx), p.aim)) > .85) continue;
+      a.hp -= dmg; a.hitT = .2; a.chasing = true; a.asleep = false;
+      const kb = (isBoss(a) || a.type === 'golem') ? 40 : 220; a.vx = dx / d * kb; a.vy = dy / d * kb;
+      if (a.hp <= 0) {
+        isl.animals.splice(i, 1);
+        killLandMob(a);
+      }
+    }
+  }
+  function attackDive() {
+    if (diver.cd > 0) return;
+    diver.cd = .42; diver.atk = .28;
+    const dmg = Math.max(1, inv.spear) + strBonus();
+    for (let i = creatures.length - 1; i >= 0; i--) {
+      const c = creatures[i];
+      const dx = c.x - diver.x, dy = c.y - diver.y, d = Math.hypot(dx, dy) || 1;
+      if (d > 78 + c.r) continue;
+      const near = d < 36 + c.r;
+      if (!near && Math.abs(angDiff(Math.atan2(dy, dx), diver.aim)) > .8) continue;
+      c.hp -= dmg; c.hitT = .2;
+      c.vx = dx / d * 170; c.vy = dy / d * 170;
+      if (c.type !== 'jelly' && c.hp > 0) c.fl = 2;
+      if (c.hp <= 0) {
+        creatures.splice(i, 1);
+        for (let k = 0; k < 6; k++) bubbles.push({ x: c.x + (rnd() - .5) * 24, y: c.y + (rnd() - .5) * 24, r: 3, life: 1 });
+        if (c.food > 0) {
+          inv.fish += c.food; caught = true;
+          floats.push({ x: c.x, y: c.y - 10, txt: '+' + c.food + ' 🐟', life: 1.2 });
+          gainXp(c.food >= 3 ? 4 : 2);
+        } else {
+          floats.push({ x: c.x, y: c.y - 10, txt: 'Медуза', life: 1 });
+          gainXp(5);
+        }
+      }
+    }
+  }
+
+  // ---------- island update ----------
+  let lastHint = 0;
+  function updateIsland(dt, now) {
+    const { vx, vy, len } = readInput();
+    moving = len > 0.08;
+    if (moving) { p.aim = Math.atan2(vy, vx); if (Math.abs(vx) > 0.1) face = vx > 0 ? 1 : -1; }
+    p.cd -= dt; p.atk -= dt; p.inv -= dt;
+
+    if (moving) {
+      const inWater = Math.hypot(p.x, p.y) > isl.radiusAt(p.x, p.y);
+      const sp = SPEED * spd() * (inWater ? 0.7 : 1) * (infect > 0 ? .8 : 1) * (chill > 0 ? .65 : 1) * envMult();
+      let nx = p.x + vx * sp * dt, ny = p.y + vy * sp * dt;
+      const ok = (x, y) => Math.hypot(x, y) <= isl.radiusAt(x, y) + 45;
+      if (!ok(nx, ny)) {
+        if (ok(nx, p.y)) ny = p.y;
+        else if (ok(p.x, ny)) nx = p.x;
+        else { nx = p.x; ny = p.y; }
+        if (now - lastHint > 3500) {
+          lastHint = now;
+          toast(inv.boat ? 'Дальше только вплавь. Нажмите «Нырнуть» или «В море».' : inv.spear ? 'Дальше только вплавь. Нажмите «Нырнуть».' : 'Здесь глубоко. Сначала сделайте копьё.');
+        }
+      }
+      p.x = nx; p.y = ny;
+    }
+    for (const t of isl.trees) {
+      const dx = p.x - t.x, dy = p.y - t.y, d = Math.hypot(dx, dy), m = 26;
+      if (d < m && d > 0) { p.x = t.x + dx / d * m; p.y = t.y + dy / d * m; }
+    }
+    if (isl.npc) {
+      const n = isl.npc, dx = p.x - n.x, dy = p.y - n.y, d = Math.hypot(dx, dy);
+      if (d < 26 && d > 0) { p.x = n.x + dx / d * 26; p.y = n.y + dy / d * 26; }
+    }
+    if (isl.id === 0 && inv.house) {
+      if (p.x > HX - 54 && p.x < HX + 54 && p.y > HY - 24 && p.y < HY + 4) {
+        const dl = p.x - (HX - 54), dr = HX + 54 - p.x, dtp = p.y - (HY - 24), db = HY + 4 - p.y;
+        const m = Math.min(dl, dr, dtp, db);
+        if (m === db) p.y = HY + 4; else if (m === dtp) p.y = HY - 24; else if (m === dl) p.x = HX - 54; else p.x = HX + 54;
+      }
+    }
+    if (isl.id === 0) {
+      const nowMs = Date.now();
+      if (weather === 'rain') for (const pl of isl.plots) if (pl.state === 2) pl.t -= dt * 1000;
+      for (const pl of isl.plots) if (pl.state === 2 && nowMs - pl.t >= GROW_MS) pl.state = 3;
+    }
+    computeAction();
+    for (let i = isl.items.length - 1; i >= 0; i--) {
+      const it = isl.items[i];
+      if (Math.hypot(it.x - p.x, it.y - p.y) < 26) {
+        isl.items.splice(i, 1);
+        inv[it.type]++;
+        updateHud();
+        toast(it.type === 'stick' ? '+1 палка' : it.type === 'stone' ? '+1 камень' : '+1 золото');
+      }
+    }
+
+    // animals
+    if (isl.danger) {
+      const cfgTotal = Object.values(isl.animalCfg).reduce((s, n) => s + n, 0);
+      if (isl.animals.filter(a => !isBoss(a)).length < cfgTotal) {
+        isl.spT += dt;
+        if (isl.spT > 20) {
+          isl.spT = 0;
+          const types = Object.keys(isl.animalCfg);
+          const an = makeAnimal(isl, types[Math.floor(rnd() * types.length)], p);
+          if (an) isl.animals.push(an);
+        }
+      } else isl.spT = 0;
+      for (const a of isl.animals) {
+        a.tt -= dt; a.hitT = Math.max(0, a.hitT - dt); a.cd -= dt;
+        const dxp = p.x - a.x, dyp = p.y - a.y, dp = Math.hypot(dxp, dyp);
+        const nearNpc = isl.npc && Math.hypot(p.x - isl.npc.x, p.y - isl.npc.y) < 110;
+        if (a.asleep) { if (dp < 380) { a.asleep = false; a.chasing = true; toast((a.name || ANIMALS[a.type].name) + ' пробудился!'); } else continue; }
+        if (!a.chasing && dp < 240 && !nearNpc) a.chasing = true;
+        if (a.chasing && (dp > 380 || nearNpc)) a.chasing = false;
+        let sp;
+        if (a.chasing) {
+          a.tang = Math.atan2(dyp, dxp); sp = a.chase;
+          if (a.type === 'archer' || a.type === 'mage' || a.type === 'wraith') { if (dp < 170) a.tang += Math.PI; else if (dp < 290) sp = 0; }
+          if (a.type === 'queen') { if (a.slam > 0) sp = 0; else if (!a.solid) sp *= 1.4; }
+          if (a.type === 'archmage') { if (dp < 220) a.tang += Math.PI; else if (dp < 380) sp = 0; else if (a.phase2) sp *= 1.3; }
+          if (a.type === 'rotlord') { if (a.slam > 0) sp = 0; else if (a.phase2) sp *= 1.25; }
+          if (a.type === 'boss') { if (a.slam > 0) sp = 0; else if (a.phase2) sp *= 1.3; }
+        }
+        else {
+          if (a.tt <= 0) { a.tt = 1 + rnd() * 2; a.tang = rnd() * 7; a.idle = rnd() < .3; }
+          sp = a.idle ? 0 : a.speed;
+        }
+        const dc = Math.hypot(a.x, a.y);
+        if (dc > isl.radiusAt(a.x, a.y) - 45) { a.tang = Math.atan2(-a.y, -a.x); if (a.chasing && dp > 40) { /* stay on land */ } sp = Math.max(sp, a.speed); }
+        if (isl.npc) {
+          const nx = a.x - isl.npc.x, ny = a.y - isl.npc.y, nd = Math.hypot(nx, ny);
+          if (nd < 100) { a.tang = Math.atan2(ny, nx); sp = a.chase; a.chasing = false; }
+        }
+        a.ang += angDiff(a.tang, a.ang) * Math.min(1, dt * 6);
+        let mx = (Math.cos(a.ang) * sp + a.vx) * dt, my = (Math.sin(a.ang) * sp + a.vy) * dt;
+        const nx2 = a.x + mx, ny2 = a.y + my;
+        if (Math.hypot(nx2, ny2) < isl.radiusAt(nx2, ny2) - 30) { a.x = nx2; a.y = ny2; }
+        for (const t of (a.ghostly ? [] : isl.trees)) {
+          const tx = a.x - t.x, ty = a.y - t.y, td = Math.hypot(tx, ty), m = 22 + a.r * .5;
+          if (td < m && td > 0) { a.x = t.x + tx / td * m; a.y = t.y + ty / td * m; }
+        }
+        const damp = Math.max(0, 1 - dt * 6);
+        a.vx *= damp; a.vy *= damp;
+        if (dp < a.r + 14 && a.cd <= 0 && p.inv <= 0 && (!a.ghostly || a.solid)) {
+          a.cd = isBoss(a) ? 1.8 : 1.2; p.inv = .8;
+          if (a.infects && !perks.cure) { if (infect <= 0) toast('Вас заразили! Съешьте овощи, чтобы вылечиться.'); infect = Math.max(infect, 10); }
+          if (a.chills && !perks.warm) { if (chill <= 0) toast('Вас сковал холод!'); chill = Math.max(chill, 5); }
+          const v = hurt(a.dmg);
+          floats.push({ x: p.x, y: p.y - 40, txt: '-' + v, life: 1 });
+          hurtFlash();
+        }
+      }
+    }
+    bossSyncT -= dt; if (bossSyncT <= 0) { bossSyncT = 1; syncBosses(isl); }
+    updateSkelAI(dt);
+    updateFloats(dt);
+
+    const dist = Math.hypot(p.x, p.y), rr = isl.radiusAt(p.x, p.y);
+    document.body.classList.toggle('canDive', inv.spear > 0 && dist > rr + 12);
+    document.body.classList.toggle('canSail', inv.boat > 0 && dist > rr + 12);
+    document.body.classList.toggle('canMine', inv.pick > 0 && !!MINE_ORES[isl.id] && dist < rr - 20);
+    document.body.classList.toggle('armed', isl.danger && inv.spear > 0);
+    document.body.classList.toggle('nearNpc', !!isl.npc && Math.hypot(p.x - isl.npc.x, p.y - isl.npc.y) < 75);
+    stats.o2 = Math.min(O2MAX, stats.o2 + dt * 20);
+    cam.x += (p.x - cam.x) * Math.min(1, dt * 6);
+    cam.y += (p.y - cam.y) * Math.min(1, dt * 6);
+  }
+
+  // ---------- sea update ----------
+  function updateSea(dt, t) {
+    const { vx, vy, len } = readInput();
+    const bs = (inv.ship ? 300 : BSPEED) * (weather === 'snow' ? .9 : 1);
+    boat.vx += (vx * bs - boat.vx) * Math.min(1, dt * 1.6);
+    boat.vy += (vy * bs - boat.vy) * Math.min(1, dt * 1.6);
+    if (len > .08) boat.ang += angDiff(Math.atan2(vy, vx), boat.ang) * Math.min(1, dt * 4);
+    boat.x += boat.vx * dt; boat.y += boat.vy * dt;
+    const bd = Math.hypot(boat.x, boat.y);
+    if (bd > SEA_R) { boat.x *= SEA_R / bd; boat.y *= SEA_R / bd; }
+    landTarget = null;
+    for (const I of islands) {
+      const dx = boat.x - I.cx, dy = boat.y - I.cy, d = Math.hypot(dx, dy) || 1;
+      const lim = I.radiusAt(dx, dy) + 70;
+      if (d < lim) {
+        const nx = dx / d, ny = dy / d;
+        boat.x = I.cx + nx * lim; boat.y = I.cy + ny * lim;
+        const vn = boat.vx * nx + boat.vy * ny;
+        if (vn < 0) { boat.vx -= vn * nx; boat.vy -= vn * ny; }
+      }
+      if (d < I.radiusAt(dx, dy) + 140) landTarget = I;
+      if (!I.discovered && d < I.maxR + 600) { I.discovered = true; toast('Вы заметили: ' + I.name); gainXp(15); }
+    }
+    updateSeaMobs(dt, t);
+    document.body.classList.toggle('hasShip', !!inv.ship);
+    document.body.classList.toggle('canLand', !!landTarget);
+    const lt = landTarget && hero.level < landTarget.minLevel ? 'Нужен ур. ' + landTarget.minLevel : 'Высадиться';
+    if ($('landBtn').textContent !== lt) $('landBtn').textContent = lt;
+    stats.o2 = O2MAX;
+    cam.x += (boat.x - cam.x) * Math.min(1, dt * 5);
+    cam.y += (boat.y - cam.y) * Math.min(1, dt * 5);
+  }
+
+  // ---------- dive update ----------
+  let lastO2Hint = 0, lastFoodHint = 0;
+  function updateDive(dt, t) {
+    const { vx, vy, len } = readInput();
+    const ds = DSPEED * spd();
+    diver.vx += (vx * ds - diver.vx) * Math.min(1, dt * 5);
+    diver.vy += (vy * ds - diver.vy) * Math.min(1, dt * 5);
+    if (len > .08) diver.aim = Math.atan2(vy, vx);
+    diver.x += diver.vx * dt; diver.y += diver.vy * dt;
+    const dc = Math.hypot(diver.x, diver.y);
+    if (dc > ARENA) { diver.x *= ARENA / dc; diver.y *= ARENA / dc; }
+    diver.cd -= dt; diver.atk -= dt; diver.inv -= dt;
+
+    stats.o2 -= dt;
+    if (stats.o2 <= 0) {
+      stats.o2 = 0; stats.hp -= 12 * dt;
+      if (t - lastO2Hint > 3) { lastO2Hint = t; toast('Не хватает воздуха! Жмите «Всплыть».'); hurtFlash(); }
+    }
+
+    bubT -= dt;
+    if (bubT <= 0) { bubT = .35; bubbles.push({ x: diver.x + (rnd() - .5) * 10, y: diver.y + (rnd() - .5) * 10, r: 2.5, life: 1.2 }); }
+    for (let i = bubbles.length - 1; i >= 0; i--) {
+      const b = bubbles[i]; b.life -= dt; b.r += dt * 4; b.y -= dt * 10;
+      if (b.life <= 0) bubbles.splice(i, 1);
+    }
+    updateFloats(dt);
+
+    for (const c of creatures) {
+      c.tt -= dt; c.hitT = Math.max(0, c.hitT - dt); c.fl = Math.max(0, c.fl - dt);
+      const dxp = diver.x - c.x, dyp = diver.y - c.y, dp = Math.hypot(dxp, dyp);
+      let sp = c.speed;
+      if (c.tt <= 0) { c.tt = 1 + rnd() * 2.5; c.tang += (rnd() - .5) * 2.4; }
+      if (c.type === 'small' && dp < 150) { c.tang = Math.atan2(-dyp, -dxp); sp *= 2.4; }
+      if (c.fl > 0) { c.tang = Math.atan2(-dyp, -dxp); sp *= 2.6; }
+      if (c.type === 'jelly') sp = c.speed * (.15 + .85 * Math.abs(Math.sin(t * 2 + c.ph)));
+      if (Math.hypot(c.x, c.y) > ARENA - 30) c.tang = Math.atan2(-c.y, -c.x);
+      c.ang += angDiff(c.tang, c.ang) * Math.min(1, dt * 5);
+      c.x += (Math.cos(c.ang) * sp + c.vx) * dt;
+      c.y += (Math.sin(c.ang) * sp + c.vy) * dt;
+      const damp = Math.max(0, 1 - dt * 6);
+      c.vx *= damp; c.vy *= damp;
+      if (c.type === 'jelly' && dp < c.r + 12 && diver.inv <= 0) {
+        diver.inv = 1;
+        const v = hurt(10);
+        floats.push({ x: diver.x, y: diver.y - 20, txt: '-' + v, life: 1 });
+        hurtFlash();
+      }
+    }
+
+    const cnt = type => creatures.reduce((n, c) => n + (c.type === type), 0);
+    for (const type of Object.keys(TARGET)) {
+      if (cnt(type) < TARGET[type]) {
+        spawnT[type] += dt;
+        if (spawnT[type] >= EVERY[type]) { spawnT[type] = 0; const c = makeCreature(type); if (c) creatures.push(c); }
+      } else spawnT[type] = 0;
+    }
+
+    cam.x += (diver.x - cam.x) * Math.min(1, dt * 6);
+    cam.y += (diver.y - cam.y) * Math.min(1, dt * 6);
+  }
+
+  // ---------- mine update ----------
+  const DROP = { 2: ['stone', '+1 камень'], 3: ['copper', '+1 медная руда'], 4: ['iron', '+1 железная руда'], 6: ['gold', '+1 золотая руда'], 7: ['coal', '+1 уголь'], 8: ['silver', '+1 серебряная руда'] };
+  const DEBRIS_COL = { 1: '#7a5433', 2: '#7c858b', 3: '#d9843f', 4: '#d8b4a0', 6: '#f2cf4a', 7: '#2b2b30', 8: '#dfe6ee' };
+  let lastPickHint = 0;
+  function mineNeed(type) { return BASE[type] / (1 + .6 * (inv.pick - REQ[type])) / (1 + hero.agi * .04); }
+  function breakTile(tx, ty, type) {
+    grid[ty * GW + tx] = 0;
+    const cx = (tx + .5) * TS, cy = (ty + .5) * TS;
+    for (let k = 0; k < 7; k++) {
+      const a = rnd() * 7, s = 40 + rnd() * 90;
+      debris.push({ x: cx, y: cy, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: .5 + rnd() * .3, c: DEBRIS_COL[type] });
+    }
+    if (type === 1) {
+      if (rnd() < .25) { inv.stick++; floats.push({ x: cx, y: cy - 10, txt: '+1 палка', life: 1 }); updateHud(); }
+    } else if (DROP[type]) {
+      inv[DROP[type][0]]++;
+      gainXp(XPMINE[type]);
+      floats.push({ x: cx, y: cy - 10, txt: DROP[type][1], life: 1.1 });
+      updateHud();
+    }
+  }
+  function updateMine(dt, t) {
+    const { vx, vy, len } = readInput();
+    miner.moving = len > .08;
+    const sp = 135 * spd();
+    if (miner.moving) {
+      miner.aim = Math.atan2(vy, vx);
+      const nx = miner.x + vx * sp * dt;
+      if (!collides(nx, miner.y)) miner.x = nx;
+      else if (Math.abs(vx) > Math.abs(vy)) {
+        const cyc = (Math.floor(miner.y / TS) + .5) * TS;
+        if (!solidAt(miner.x + Math.sign(vx) * 16, cyc)) {
+          const d = cyc - miner.y, ny = miner.y + Math.sign(d) * Math.min(Math.abs(d), 140 * dt);
+          if (!collides(miner.x, ny)) miner.y = ny;
+        }
+      }
+      const ny2 = miner.y + vy * sp * dt;
+      if (!collides(miner.x, ny2)) miner.y = ny2;
+      else if (Math.abs(vy) >= Math.abs(vx)) {
+        const cxc = (Math.floor(miner.x / TS) + .5) * TS;
+        if (!solidAt(cxc, miner.y + Math.sign(vy) * 16)) {
+          const d = cxc - miner.x, nx2 = miner.x + Math.sign(d) * Math.min(Math.abs(d), 140 * dt);
+          if (!collides(nx2, miner.y)) miner.x = nx2;
+        }
+      }
+    }
+
+    let tgt = null;
+    if (miner.moving) {
+      let dx = 0, dy = 0;
+      if (Math.abs(vx) > Math.abs(vy)) dx = Math.sign(vx); else dy = Math.sign(vy);
+      const tx = Math.floor((miner.x + dx * 19) / TS), ty = Math.floor((miner.y + dy * 19) / TS);
+      const type = tileAt(tx, ty);
+      if (type !== 0) tgt = { tx, ty, type };
+    }
+    miner.mining = false;
+    if (tgt) {
+      const req = REQ[tgt.type];
+      if (inv.pick < req) {
+        mineTgt = null; mineProg = 0;
+        if (t - lastPickHint > 3) {
+          lastPickHint = t;
+          toast(tgt.type === 5 ? 'Это основание острова, его не пробить.' : 'Нужна кирка получше.');
+        }
+      } else {
+        if (!mineTgt || mineTgt.tx !== tgt.tx || mineTgt.ty !== tgt.ty) { mineTgt = tgt; mineProg = 0; }
+        miner.mining = true;
+        mineProg += dt;
+        const need = mineNeed(tgt.type);
+        if (mineProg >= need) { breakTile(tgt.tx, tgt.ty, tgt.type); mineTgt = null; mineProg = 0; }
+      }
+    } else { mineTgt = null; mineProg = 0; }
+
+    const mtx = Math.floor(miner.x / TS), mty = Math.floor(miner.y / TS);
+    for (let dy = -5; dy <= 5; dy++) for (let dx = -5; dx <= 5; dx++) {
+      if (dx * dx + dy * dy <= 21) {
+        const x = mtx + dx, y = mty + dy;
+        if (x >= 0 && y >= 0 && x < GW && y < GH) seen[y * GW + x] = 1;
+      }
+    }
+
+    for (let i = debris.length - 1; i >= 0; i--) {
+      const d = debris[i]; d.life -= dt; d.x += d.vx * dt; d.y += d.vy * dt; d.vx *= .92; d.vy *= .92;
+      if (d.life <= 0) debris.splice(i, 1);
+    }
+    updateFloats(dt);
+
+    const lx = (LX + .5) * TS, ly = (LY + .5) * TS;
+    document.body.classList.toggle('nearLadder', Math.hypot(miner.x - lx, miner.y - ly) < 75);
+    stats.o2 = O2MAX;
+    cam.x += (miner.x - cam.x) * Math.min(1, dt * 8);
+    cam.y += (miner.y - cam.y) * Math.min(1, dt * 8);
+  }
+
+  // ---------- farm, house, chest ----------
+  const GROW_MS = 90000;
+  const CH = [['stick', '🪵', 'Палки'], ['stone', '🪨', 'Камни'], ['coal', '⚫', 'Уголь'], ['fish', '🐟', 'Рыба'], ['meat', '🥩', 'Мясо'],
+              ['veg', '🥕', 'Овощи'], ['seed', '🌱', 'Семена'],
+              ['copper', '🟠', 'Медная руда'], ['iron', '⚙️', 'Железная руда'], ['silver', '⚪', 'Серебряная руда'], ['gold', '🟡', 'Золотая руда'],
+              ['cuBar', '🟧', 'Медные слитки'], ['feBar', '⬛', 'Железные слитки'], ['agBar', '⬜', 'Серебряные слитки'], ['auBar', '🟨', 'Золотые слитки']];
+  const chest = {}; CH.forEach(c => { chest[c[0]] = 0; });
+  const shipChest = {}; CH.forEach(c => { shipChest[c[0]] = 0; });
+  let store = chest;
+  let curAct = null;
+
+  function harvest(pl) {
+    inv.veg += 2; inv.seed += 1 + (rnd() < .3 ? 1 : 0);
+    gainXp(3);
+    pl.state = 1;
+    floats.push({ x: pl.x, y: pl.y - 18, txt: '+2 🥕', life: 1.2 });
+    updateHud();
+  }
+  function rest() {
+    const now = Date.now();
+    if (now - restAt < 60000) { toast('Вы ещё не устали. Попробуйте чуть позже.'); return; }
+    transition(() => {
+      stats.hp = Math.min(maxHp(), stats.hp + 50); stats.food = Math.max(0, stats.food - 10);
+      restAt = Date.now(); infect = 0; chill = 0;
+      toast('Вы отдохнули: здоровье восстановлено.');
+    });
+  }
+  function computeAction() {
+    curAct = null;
+    if (scene === 'island' && isl.id === 0 && !busy) {
+      let best = 1e9;
+      const cand = (d, label, fn) => { if (d < best) { best = d; curAct = { label, fn }; } };
+      if (inv.hoe) {
+        for (const pl of isl.plots) {
+          const d = Math.hypot(p.x - pl.x, p.y - pl.y);
+          if (d > 34) continue;
+          if (pl.state === 0) cand(d, 'Вспахать', () => { pl.state = 1; floats.push({ x: pl.x, y: pl.y - 18, txt: 'вспахано', life: 1 }); });
+          else if (pl.state === 1) cand(d, 'Посадить', () => {
+            if (inv.seed < 1) { toast('Нет семян.'); return; }
+            inv.seed--; pl.state = 2; pl.t = Date.now(); updateHud();
+            floats.push({ x: pl.x, y: pl.y - 18, txt: '🌱', life: 1 });
+          });
+          else if (pl.state === 3) cand(d, 'Собрать', () => harvest(pl));
+        }
+      }
+      if (inv.house) {
+        cand(Math.hypot(p.x - HX, p.y - (HY + 12)), 'Войти', enterHome);
+        if (curAct && best > 62 && curAct.label === 'Войти') curAct = null;
+      }
+    }
+    document.body.classList.toggle('hasAct', !!curAct);
+    if (curAct) $('actBtn').textContent = curAct.label;
+  }
+  $('actBtn').addEventListener('click', () => { if (curAct && !busy) curAct.fn(); });
+
+  function renderChest() {
+    let h = '<div class="crow head"><span></span><span>Сумка | Хранилище</span><span></span></div>';
+    let any = false;
+    for (const [k, em, nm] of CH) {
+      if (!inv[k] && !store[k]) continue;
+      any = true;
+      h += `<div class="crow"><span>${em} ${nm}</span><span>${inv[k]} | ${store[k]}</span><span><button data-k="${k}" data-d="in" ${inv[k] ? '' : 'disabled'}>→</button><button data-k="${k}" data-d="out" ${store[k] ? '' : 'disabled'}>←</button></span></div>`;
+    }
+    if (!any) h += '<p>Пока пусто. Стрелка → кладёт всё в хранилище, ← забирает всё.</p>';
+    $('chestRows').innerHTML = h;
+  }
+  $('chestRows').addEventListener('click', e => {
+    const b = e.target.closest('button[data-k]');
+    if (!b || b.disabled) return;
+    const k = b.dataset.k;
+    if (b.dataset.d === 'in') { store[k] += inv[k]; inv[k] = 0; } else { inv[k] += store[k]; store[k] = 0; }
+    updateHud(); renderChest();
+  });
+  function openChest(kind) {
+    store = kind === 'ship' ? shipChest : chest;
+    $('chestTitle').textContent = kind === 'ship' ? 'Трюм корабля' : 'Сундук';
+    renderChest(); $('chestUI').hidden = false;
+  }
+  $('holdBtn').addEventListener('click', () => { if (!busy && inv.ship) openChest('ship'); });
+  $('chestClose').addEventListener('click', () => { $('chestUI').hidden = true; });
+
+  function drawFarm(t) {
+    if (isl.id !== 0 || !inv.hoe) return;
+    const now = Date.now();
+    const x0 = FX - 34, y0 = FY - 34, x1 = FX + 3 * 48 + 34, y1 = FY + 2 * 48 + 34;
+    ctx.strokeStyle = 'rgba(138,90,43,.9)'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.rect(x0, y0, x1 - x0, y1 - y0); ctx.stroke();
+    ctx.fillStyle = '#6b431f';
+    for (let x = x0; x <= x1; x += 36) { ctx.fillRect(x - 2.5, y0 - 5, 5, 10); ctx.fillRect(x - 2.5, y1 - 5, 5, 10); }
+    for (let y = y0; y <= y1; y += 36) { ctx.fillRect(x0 - 2.5, y - 5, 5, 10); ctx.fillRect(x1 - 2.5, y - 5, 5, 10); }
+    for (const pl of isl.plots) {
+      const x = pl.x - 21, y = pl.y - 21;
+      if (pl.state === 0) { ctx.strokeStyle = 'rgba(70,45,20,.35)'; ctx.lineWidth = 2; ctx.strokeRect(x + 2, y + 2, 38, 38); continue; }
+      ctx.fillStyle = '#5a3a22'; ctx.fillRect(x, y, 42, 42);
+      ctx.strokeStyle = 'rgba(0,0,0,.25)'; ctx.lineWidth = 2;
+      for (let k = 1; k < 4; k++) { ctx.beginPath(); ctx.moveTo(x + 4, y + k * 10.5); ctx.lineTo(x + 38, y + k * 10.5); ctx.stroke(); }
+      if (pl.state === 2) {
+        const pr = Math.min(1, (now - pl.t) / GROW_MS), sz = 3 + pr * 8;
+        ctx.fillStyle = '#4fae4a';
+        ctx.beginPath(); ctx.ellipse(pl.x - sz * .7, pl.y - 2, sz, sz * .45, -.5, 0, 7); ctx.ellipse(pl.x + sz * .7, pl.y - 2, sz, sz * .45, .5, 0, 7); ctx.fill();
+      } else if (pl.state === 3) {
+        ctx.fillStyle = '#3f9a3f';
+        for (let k = 0; k < 5; k++) {
+          ctx.save(); ctx.translate(pl.x, pl.y + 2); ctx.rotate(k / 5 * Math.PI * 2 + Math.sin(t + pl.x) * .05);
+          ctx.beginPath(); ctx.ellipse(0, -9, 3.5, 9, 0, 0, 7); ctx.fill(); ctx.restore();
+        }
+        ctx.fillStyle = '#f08a2d'; ctx.beginPath(); ctx.arc(pl.x, pl.y + 2, 6, 0, 7); ctx.fill();
+      }
+    }
+  }
+  function drawHouse() {
+    const x = HX, y = HY;
+    ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.beginPath(); ctx.ellipse(x + 8, y + 8, 66, 14, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#c79a62'; ctx.fillRect(x - 50, y - 56, 100, 56);
+    ctx.fillStyle = 'rgba(0,0,0,.12)'; for (let k = 1; k < 5; k++) ctx.fillRect(x - 50, y - 56 + k * 11, 100, 2);
+    ctx.fillStyle = '#5a3a1e'; ctx.fillRect(x - 11, y - 34, 22, 34);
+    ctx.fillStyle = '#e8d08a'; ctx.beginPath(); ctx.arc(x + 6, y - 16, 1.8, 0, 7); ctx.fill();
+    ctx.fillStyle = '#e8d08a'; ctx.fillRect(x - 40, y - 42, 18, 16); ctx.fillRect(x + 22, y - 42, 18, 16);
+    ctx.fillStyle = '#a8452f';
+    ctx.beginPath(); ctx.moveTo(x - 62, y - 52); ctx.lineTo(x + 62, y - 52); ctx.lineTo(x + 42, y - 108); ctx.lineTo(x - 42, y - 108); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,.18)'; ctx.lineWidth = 2;
+    for (let k = 1; k < 4; k++) { const yy = y - 52 - k * 14; ctx.beginPath(); ctx.moveTo(x - 62 + k * 5, yy); ctx.lineTo(x + 62 - k * 5, yy); ctx.stroke(); }
+  }
+  function drawChestObj() {
+    const x = CHX, y = CHY;
+    ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.beginPath(); ctx.ellipse(x + 3, y + 4, 20, 6, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#8a5a2b'; ctx.fillRect(x - 16, y - 18, 32, 18);
+    ctx.fillStyle = '#a8743b'; ctx.fillRect(x - 16, y - 26, 32, 10);
+    ctx.fillStyle = '#d9b04a'; ctx.fillRect(x - 3, y - 20, 6, 7);
+    ctx.strokeStyle = '#5a3a1e'; ctx.lineWidth = 2; ctx.strokeRect(x - 16, y - 26, 32, 26);
+  }
+
+  // ---------- save / load ----------
+  const SAVE_KEY = 'island_save_v1';
+  const toB64 = u => { let str = ''; for (let i = 0; i < u.length; i++) str += String.fromCharCode(u[i]); return btoa(str); };
+  const fromB64 = b => { const str = atob(b), u = new Uint8Array(str.length); for (let i = 0; i < str.length; i++) u[i] = str.charCodeAt(i); return u; };
+  function serialize() {
+    return JSON.stringify({
+      v: 1, eq: equip, bd: { ...bossDown }, bdn: { ...bossDownN }, env: { t: dayT, n: dayNo, w: weather, wt: wxT }, fn: { ...furnace }, hero: { ...hero }, inv: { ...inv }, chest: { ...chest }, sc: { ...shipChest }, hp: stats.hp, food: stats.food, perks: { ...perks }, caught,
+      isl: isl.id, p: scene === 'home' ? { x: savedPos.x, y: savedPos.y } : { x: p.x, y: p.y },
+      npc: islands.map(I => I.npc ? I.npc.stage : 0), disc: islands.map(I => I.discovered),
+      plots: islands[0].plots.map(pl => [pl.state, pl.t]), restAt,
+      mines: Object.fromEntries(Object.entries(mines).map(([k, m]) => [k, { g: toB64(m.g), s: toB64(m.s) }]))
+    });
+  }
+  function applySave(o) {
+    if (!o || o.v !== 1) throw new Error('bad save');
+    for (const k in inv) if (typeof o.inv[k] === 'number') inv[k] = o.inv[k];
+    for (const k in chest) if (typeof o.chest[k] === 'number') chest[k] = o.chest[k];
+    if (o.sc) for (const k in shipChest) if (typeof o.sc[k] === 'number') shipChest[k] = o.sc[k];
+    for (const k in perks) perks[k] = !!o.perks[k];
+    if (o.hero) { for (const k in hero) if (typeof o.hero[k] === 'number') hero[k] = o.hero[k]; }
+    else { hero.level = 3; hero.xp = 0; hero.pts = 6; hero.vit = hero.str = hero.agi = hero.end = 0; }
+    if (o.bd) for (const k in o.bd) if (o.bd[k]) { bossDown[k] = true; const BI = islands[k]; if (BI) BI.animals = BI.animals.filter(a => !isBoss(a)); }
+    if (bossDown[5] && !inv.am) { inv.am = 1; if (!o.eq) equip = 3; }
+    if (typeof o.eq === 'number') equip = o.eq;
+    if (!(equip === 0 || (equip === 1 && inv.arm >= 1) || (equip === 2 && inv.arm >= 2) || (equip === 3 && inv.am > 0))) equip = 0;
+    infect = 0; chill = 0;
+    recalc();
+    stats.hp = Math.min(maxHp(), Math.max(1, +o.hp || maxHp())); stats.food = Math.min(100, Math.max(0, +o.food || 0)); stats.o2 = O2MAX;
+    caught = !!o.caught; restAt = +o.restAt || 0;
+    islands.forEach((I, i) => {
+      if (I.npc) I.npc.stage = Math.min(I.npc.quests.length, o.npc[i] | 0);
+      I.discovered = I.id === 0 || !!o.disc[i];
+    });
+    o.plots.forEach((pl, i) => { const q = islands[0].plots[i]; if (q) { q.state = pl[0] | 0; q.t = +pl[1] || 0; } });
+    mines = {}; grid = null; seen = null;
+    if (o.mines) {
+      for (const k in o.mines) {
+        const g = fromB64(o.mines[k].g), sn = fromB64(o.mines[k].s);
+        if (g.length === GW * GH && sn.length === GW * GH) mines[k] = { g, s: sn };
+      }
+    } else if (o.mine) {
+      const g = fromB64(o.mine.g), sn = fromB64(o.mine.s);
+      for (let i = 0; i < g.length; i++) if (g[i] === 4 || g[i] === 6) g[i] = 2;
+      if (g.length === GW * GH && sn.length === GW * GH) mines[0] = { g, s: sn };
+    }
+    if (o.bdn) for (const k in o.bdn) if (o.bdn[k]) bossDownN[k] = true;
+    if (o.env) { dayT = +o.env.t || .12; dayNo = (o.env.n | 0) || 1; weather = o.env.w || 'clear'; wxT = +o.env.wt || 150; }
+    furnace = (o.fn && typeof o.fn.n === 'number' && o.fn.out) ? { out: o.fn.out, n: o.fn.n, start: +o.fn.start || Date.now() } : { out: null, n: 0, start: 0 };
+    isl = islands[o.isl] || islands[0];
+    p.x = +o.p.x || 0; p.y = +o.p.y || 0; cam.x = p.x; cam.y = p.y;
+    syncBosses(isl);
+    setScene('island'); floats = [];
+    updateHud();
+  }
+  let storageOK = false;
+  try { localStorage.setItem('__t', '1'); localStorage.removeItem('__t'); storageOK = true; } catch (e) { storageOK = false; }
+  function saveLocal() { if (!storageOK) return false; try { localStorage.setItem(SAVE_KEY, serialize()); return true; } catch (e) { return false; } }
+  function loadLocal() {
+    if (!storageOK) return false;
+    try { const sv = localStorage.getItem(SAVE_KEY); if (!sv) return false; applySave(JSON.parse(sv)); return true; } catch (e) { return false; }
+  }
+
+  function menuStatus() {
+    $('saveStatus').textContent = storageOK
+      ? 'Автосохранение включено: игра сохраняется сама.'
+      : 'Автосохранение в этом окне недоступно. Скопируйте «Код сохранения» и вставьте его в следующий раз через «Загрузить код».';
+  }
+  $('menuBtn').addEventListener('click', () => {
+    menuStatus(); $('codeBox').hidden = true; $('applyCode').hidden = true; $('menu').hidden = false;
+  });
+  $('menuClose').addEventListener('click', () => { $('menu').hidden = true; });
+  $('saveNow').addEventListener('click', () => {
+    toast(saveLocal() ? 'Сохранено.' : 'Автосохранение здесь недоступно. Возьмите «Код сохранения».');
+  });
+  $('showCode').addEventListener('click', () => {
+    const code = btoa(serialize()), box = $('codeBox');
+    box.value = code; box.hidden = false; $('applyCode').hidden = true;
+    box.focus(); box.select();
+    try { navigator.clipboard.writeText(code).then(() => toast('Код скопирован.'), () => toast('Выделите код и скопируйте.')); }
+    catch (e) { toast('Выделите код и скопируйте.'); }
+  });
+  $('openLoad').addEventListener('click', () => {
+    const box = $('codeBox'); box.value = ''; box.hidden = false; $('applyCode').hidden = false; box.focus();
+  });
+  $('applyCode').addEventListener('click', () => {
+    try {
+      applySave(JSON.parse(atob($('codeBox').value.trim())));
+      $('menu').hidden = true; saveLocal(); toast('Прогресс загружен.');
+    } catch (e) { toast('Код не подошёл.'); }
+  });
+  let ngArmed = false;
+  $('newGame').addEventListener('click', () => {
+    if (!ngArmed) {
+      ngArmed = true; $('newGame').textContent = 'Точно? Нажмите ещё раз';
+      setTimeout(() => { ngArmed = false; $('newGame').textContent = 'Новая игра'; }, 4000);
+      return;
+    }
+    try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ }
+    location.reload();
+  });
+  setInterval(() => { if (!busy) saveLocal(); }, 15000);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) saveLocal(); });
+
+  // ---------- sea monsters & cannon ----------
+  const MOBS = {
+    shark:  { r: 22, hp: 6,  speed: 120, chase: 200, dmg: 12, drop: { meat: 4 } },
+    kraken: { r: 48, hp: 30, speed: 55,  chase: 95,  dmg: 22, drop: { gold: 5, meat: 6 } }
+  };
+  let seaMobs = [], balls = [], puffs = [];
+  const seaSp = { shark: 0, kraken: 0 };
+  let warnedShark = false;
+  const nearAnyIsland = (x, y, m) => islands.some(I => { const dx = x - I.cx, dy = y - I.cy; return Math.hypot(dx, dy) < I.radiusAt(dx, dy) + m; });
+  function spawnSeaMob(type) {
+    const T = MOBS[type];
+    for (let i = 0; i < 60; i++) {
+      const a = rnd() * 7, d = 520 + rnd() * 320;
+      const x = boat.x + Math.cos(a) * d, y = boat.y + Math.sin(a) * d;
+      if (Math.hypot(x, y) > SEA_R - 100) continue;
+      if (nearAnyIsland(x, y, 260)) continue;
+      if (type === 'kraken' && Math.hypot(x, y) < 1100) continue;
+      const ang = rnd() * 7;
+      seaMobs.push({ type, r: T.r, hp: T.hp, maxhp: T.hp, speed: T.speed, chase: T.chase, dmg: isNight() ? Math.round(T.dmg * 1.3) : T.dmg, drop: T.drop,
+        x, y, ang, tang: ang, tt: rnd() * 2, cd: 1, hitT: 0, vx: 0, vy: 0, ph: rnd() * 6, chasing: false, slam: 0 });
+      return true;
+    }
+    return false;
+  }
+  function killSeaMob(i) {
+    const m = seaMobs[i]; seaMobs.splice(i, 1);
+    const parts = [];
+    for (const k in m.drop) { inv[k] += m.drop[k]; parts.push('+' + m.drop[k] + (k === 'meat' ? ' 🥩' : ' 🟡')); }
+    floats.push({ x: m.x, y: m.y - 30, txt: parts.join(' '), life: 1.8 });
+    for (let k = 0; k < 8; k++) puffs.push({ x: m.x + (rnd() - .5) * m.r * 2, y: m.y + (rnd() - .5) * m.r * 2, r: 6, life: .8, c: 'rgba(255,255,255,.6)' });
+    gainXp(m.type === 'kraken' ? 100 : 20);
+    if (m.type === 'kraken') toast('Вы победили кракена!');
+    updateHud();
+  }
+  function damageMob(i, dmg, kx, ky) {
+    const m = seaMobs[i]; m.hp -= dmg; m.hitT = .2; m.chasing = true; m.vx += kx; m.vy += ky;
+    if (m.hp <= 0) killSeaMob(i);
+  }
+  function updateSeaMobs(dt, t) {
+    boat.cd -= dt; boat.atk -= dt;
+    const safe = nearAnyIsland(boat.x, boat.y, 170);
+    const near = nearAnyIsland(boat.x, boat.y, 300);
+    if (!near) {
+      seaSp.shark += dt; seaSp.kraken += dt;
+      if (seaSp.shark > (isNight() ? 5 : 8) && seaMobs.filter(m => m.type === 'shark').length < (isNight() ? 3 : 2)) {
+        seaSp.shark = 0;
+        if (spawnSeaMob('shark') && !warnedShark) { warnedShark = true; toast('В воде акулы! Держитесь подальше или отбивайтесь.'); }
+      }
+      if (seaSp.kraken > (isNight() ? 20 : 30) && !seaMobs.some(m => m.type === 'kraken')) {
+        seaSp.kraken = 0;
+        if (spawnSeaMob('kraken')) toast('Что-то огромное всплыло вдалеке...');
+      }
+    }
+    for (let i = seaMobs.length - 1; i >= 0; i--) {
+      const m = seaMobs[i];
+      m.tt -= dt; m.cd -= dt; m.hitT = Math.max(0, m.hitT - dt);
+      const dx = boat.x - m.x, dy = boat.y - m.y, dp = Math.hypot(dx, dy) || 1;
+      if (dp > 1400) { seaMobs.splice(i, 1); continue; }
+      const range = m.type === 'shark' ? 450 : 600;
+      if (!safe && dp < range) m.chasing = true;
+      if (safe || dp > range + 250) m.chasing = false;
+      let sp = m.speed;
+      if (m.chasing) {
+        if (m.type === 'kraken' && m.slam > 0) sp = 0;
+        else { m.tang = Math.atan2(dy, dx); sp = m.chase; }
+      } else if (m.tt <= 0) { m.tt = 1.5 + rnd() * 2.5; m.tang += (rnd() - .5) * 2.2; }
+      m.ang += angDiff(m.tang, m.ang) * Math.min(1, dt * 4);
+      m.x += (Math.cos(m.ang) * sp + m.vx) * dt; m.y += (Math.sin(m.ang) * sp + m.vy) * dt;
+      const damp = Math.max(0, 1 - dt * 4); m.vx *= damp; m.vy *= damp;
+      for (const I of islands) {
+        const ix = m.x - I.cx, iy = m.y - I.cy, idd = Math.hypot(ix, iy) || 1, lim = I.radiusAt(ix, iy) + 60;
+        if (idd < lim) { m.x = I.cx + ix / idd * lim; m.y = I.cy + iy / idd * lim; m.tang = Math.atan2(iy, ix); }
+      }
+      if (m.type === 'shark') {
+        if (dp < m.r + 34 && m.cd <= 0) {
+          m.cd = 1.6;
+          const v = hurt(m.dmg);
+          floats.push({ x: boat.x, y: boat.y - 30, txt: '-' + v, life: 1 }); hurtFlash();
+          m.vx = -dx / dp * 260; m.vy = -dy / dp * 260;
+        }
+      } else if (m.slam > 0) {
+        m.slam -= dt;
+        if (m.slam <= 0) {
+          m.cd = 2.6;
+          if (Math.hypot(boat.x - m.x, boat.y - m.y) < m.r + 150) {
+            const v = hurt(m.dmg);
+            floats.push({ x: boat.x, y: boat.y - 30, txt: '-' + v, life: 1 }); hurtFlash();
+          }
+          for (let k = 0; k < 10; k++) puffs.push({ x: m.x + Math.cos(k * .63) * (m.r + 100), y: m.y + Math.sin(k * .63) * (m.r + 100), r: 8, life: .7, c: 'rgba(255,255,255,.5)' });
+        }
+      } else if (m.chasing && dp < m.r + 130 && m.cd <= 0) m.slam = .9;
+    }
+    for (let i = balls.length - 1; i >= 0; i--) {
+      const b = balls[i]; b.life -= dt; b.x += b.vx * dt; b.y += b.vy * dt;
+      let hit = false;
+      for (let j = seaMobs.length - 1; j >= 0; j--) {
+        const m = seaMobs[j];
+        if (Math.hypot(b.x - m.x, b.y - m.y) < m.r + 8) { damageMob(j, 5 + strBonus(), b.vx * .15, b.vy * .15); hit = true; break; }
+      }
+      if (hit || b.life <= 0) {
+        for (let k = 0; k < 4; k++) puffs.push({ x: b.x + (rnd() - .5) * 12, y: b.y + (rnd() - .5) * 12, r: 4, life: .5, c: hit ? 'rgba(255,200,120,.8)' : 'rgba(255,255,255,.7)' });
+        balls.splice(i, 1);
+      }
+    }
+    for (let i = puffs.length - 1; i >= 0; i--) { const q = puffs[i]; q.life -= dt; q.r += dt * 14; if (q.life <= 0) puffs.splice(i, 1); }
+    updateFloats(dt);
+  }
+  function attackSea() {
+    if (busy || boat.cd > 0) return;
+    if (inv.ship) {
+      boat.cd = 1.0;
+      let aim = boat.ang, best = 1e9;
+      for (const m of seaMobs) {
+        const dx = m.x - boat.x, dy = m.y - boat.y, d = Math.hypot(dx, dy);
+        if (d < 700 && Math.abs(angDiff(Math.atan2(dy, dx), boat.ang)) < .9 && d < best) { best = d; aim = Math.atan2(dy, dx); }
+      }
+      const ca = Math.cos(aim), sa = Math.sin(aim);
+      balls.push({ x: boat.x + ca * 50, y: boat.y + sa * 50, vx: ca * 520, vy: sa * 520, life: 1.3 });
+      for (let k = 0; k < 5; k++) puffs.push({ x: boat.x + ca * 55 + (rnd() - .5) * 10, y: boat.y + sa * 55 + (rnd() - .5) * 10, r: 5, life: .5, c: 'rgba(230,230,230,.7)' });
+    } else {
+      boat.cd = .55; boat.atk = .25;
+      const dmg = Math.max(1, inv.spear) + strBonus();
+      for (let i = seaMobs.length - 1; i >= 0; i--) {
+        const m = seaMobs[i], dx = m.x - boat.x, dy = m.y - boat.y, d = Math.hypot(dx, dy) || 1;
+        if (d > 105 + m.r) continue;
+        if (Math.abs(angDiff(Math.atan2(dy, dx), boat.ang)) > .9 && d > 45 + m.r) continue;
+        damageMob(i, dmg, dx / d * 80, dy / d * 80);
+      }
+    }
+  }
+
+  function drawSeaMob(m, t) {
+    ctx.save(); ctx.translate(m.x, m.y);
+    if (m.type === 'shark') {
+      ctx.rotate(m.ang);
+      const r = m.r, L = r * 1.7, Wd = r * .62, sw = Math.sin(t * (m.chasing ? 9 : 4) + m.ph) * .25;
+      ctx.fillStyle = 'rgba(0,0,0,.15)'; ctx.beginPath(); ctx.ellipse(3, 6, L, Wd, 0, 0, 7); ctx.fill();
+      ctx.save(); ctx.translate(-L * .85, 0); ctx.rotate(sw);
+      ctx.fillStyle = m.hitT > 0 ? '#fff' : '#5d6e7e';
+      ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(-r * 1.1, -r * .75); ctx.lineTo(-r * .6, 0); ctx.lineTo(-r * 1.1, r * .75); ctx.closePath(); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = m.hitT > 0 ? '#fff' : '#72879a';
+      ctx.beginPath(); ctx.moveTo(L * 1.05, 0); ctx.quadraticCurveTo(L * .5, -Wd * 1.1, -L * .8, -Wd * .35); ctx.lineTo(-L * .8, Wd * .35); ctx.quadraticCurveTo(L * .5, Wd * 1.1, L * 1.05, 0); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.4)'; ctx.beginPath(); ctx.ellipse(L * .1, Wd * .35, L * .6, Wd * .25, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = m.hitT > 0 ? '#fff' : '#4a5967';
+      ctx.beginPath(); ctx.moveTo(L * .1, 0); ctx.lineTo(-L * .25, -Wd * 1.5); ctx.lineTo(-L * .35, 0); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(L * .2, Wd * .4); ctx.lineTo(0, Wd * 1.6); ctx.lineTo(-L * .1, Wd * .4); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(L * .2, -Wd * .4); ctx.lineTo(0, -Wd * 1.6); ctx.lineTo(-L * .1, -Wd * .4); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = m.chasing ? '#ff3b2f' : '#111';
+      ctx.beginPath(); ctx.arc(L * .7, -Wd * .35, 2.6, 0, 7); ctx.arc(L * .7, Wd * .35, 2.6, 0, 7); ctx.fill();
+    } else {
+      const r = m.r;
+      if (m.slam > 0) {
+        ctx.fillStyle = 'rgba(220,40,40,' + (.12 + .1 * Math.sin(t * 18)) + ')';
+        ctx.beginPath(); ctx.arc(0, 0, r + 150, 0, 7); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,80,60,.8)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, r + 150, 0, 7); ctx.stroke();
+      }
+      ctx.strokeStyle = m.hitT > 0 ? '#fff' : '#5b3f8a'; ctx.lineWidth = 12; ctx.lineCap = 'round';
+      for (let k = 0; k < 8; k++) {
+        const a = k / 8 * Math.PI * 2 + Math.sin(t * .5 + m.ph) * .2, ca = Math.cos(a), sa = Math.sin(a);
+        const w = Math.sin(t * 2.5 + k) * 22 + (m.slam > 0 ? 25 : 0);
+        ctx.beginPath(); ctx.moveTo(ca * r * .6, sa * r * .6);
+        ctx.quadraticCurveTo(ca * r * 1.5 - sa * w, sa * r * 1.5 + ca * w, ca * r * 2.3, sa * r * 2.3); ctx.stroke();
+      }
+      ctx.fillStyle = m.hitT > 0 ? '#fff' : '#7d5cb5';
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.2)'; ctx.beginPath(); ctx.arc(-r * .3, -r * .3, r * .45, 0, 7); ctx.fill();
+      ctx.fillStyle = '#ffe36b';
+      ctx.beginPath(); ctx.arc(-r * .35, -r * .1, 9, 0, 7); ctx.arc(r * .35, -r * .1, 9, 0, 7); ctx.fill();
+      ctx.fillStyle = '#111';
+      ctx.beginPath(); ctx.arc(-r * .35, -r * .1, 4, 0, 7); ctx.arc(r * .35, -r * .1, 4, 0, 7); ctx.fill();
+    }
+    ctx.restore();
+    if (m.hp < m.maxhp) {
+      const bw = m.type === 'kraken' ? 70 : 36;
+      ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(m.x - bw / 2, m.y - m.r * 1.6 - 14, bw, 5);
+      ctx.fillStyle = '#e0533f'; ctx.fillRect(m.x - bw / 2, m.y - m.r * 1.6 - 14, bw * Math.max(0, m.hp) / m.maxhp, 5);
+    }
+  }
+  function drawBalls() {
+    for (const b of balls) {
+      ctx.fillStyle = '#1e2228'; ctx.beginPath(); ctx.arc(b.x, b.y, 6, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.4)'; ctx.beginPath(); ctx.arc(b.x - 2, b.y - 2, 2, 0, 7); ctx.fill();
+    }
+    for (const q of puffs) {
+      ctx.globalAlpha = Math.max(0, Math.min(1, q.life * 1.6));
+      ctx.fillStyle = q.c; ctx.beginPath(); ctx.arc(q.x, q.y, q.r, 0, 7); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+  function drawBoatSpear() {
+    if (boat.atk <= 0 || inv.ship) return;
+    const ext = Math.sin((1 - boat.atk / .25) * Math.PI);
+    ctx.save(); ctx.translate(boat.x, boat.y); ctx.rotate(boat.ang);
+    ctx.strokeStyle = '#8a5a2b'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(48 + ext * 60, 0); ctx.stroke();
+    ctx.fillStyle = TIER_COL[Math.max(1, inv.spear)];
+    ctx.beginPath(); ctx.moveTo(64 + ext * 60, 0); ctx.lineTo(46 + ext * 60, -5); ctx.lineTo(46 + ext * 60, 5); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  function drawShip(t) {
+    ctx.save(); ctx.translate(boat.x, boat.y); ctx.rotate(boat.ang);
+    const sp = Math.hypot(boat.vx, boat.vy);
+    if (sp > 15) {
+      ctx.strokeStyle = 'rgba(255,255,255,' + Math.min(.5, sp / 450) + ')'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+      for (const s2 of [-1, 1]) { ctx.beginPath(); ctx.moveTo(-50, s2 * 16); ctx.lineTo(-50 - sp * .45, s2 * (22 + sp * .06)); ctx.stroke(); }
+    }
+    ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.beginPath(); ctx.ellipse(6, 10, 64, 22, 0, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(66, 0); ctx.quadraticCurveTo(44, -27, -40, -25); ctx.lineTo(-54, -14); ctx.lineTo(-54, 14); ctx.lineTo(-40, 25); ctx.quadraticCurveTo(44, 27, 66, 0);
+    ctx.fillStyle = '#59626e'; ctx.fill(); ctx.strokeStyle = '#3a414b'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = '#9a7b52'; ctx.beginPath(); ctx.ellipse(-2, 0, 46, 16, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,.18)'; ctx.lineWidth = 2;
+    for (let k = -2; k <= 2; k++) { ctx.beginPath(); ctx.moveTo(-40, k * 5); ctx.lineTo(38, k * 5); ctx.stroke(); }
+    ctx.fillStyle = '#1e2228';
+    for (const s2 of [-1, 1]) { ctx.fillRect(8, s2 * 16 - 3.5, 20, 7); ctx.beginPath(); ctx.arc(8, s2 * 16, 5, 0, 7); ctx.fill(); }
+    if (boat.cd > .88) {
+      ctx.fillStyle = 'rgba(255,210,90,.9)';
+      for (const s2 of [-1, 1]) { ctx.beginPath(); ctx.arc(32, s2 * 16, 7, 0, 7); ctx.fill(); }
+    }
+    ctx.fillStyle = '#5a3a1e'; ctx.beginPath(); ctx.arc(-8, 0, 5, 0, 7); ctx.fill();
+    ctx.fillStyle = '#f2ecd8'; ctx.beginPath(); ctx.ellipse(-8, 0, 7, 24, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#d94a3a'; ctx.beginPath(); ctx.moveTo(-8, 0); ctx.lineTo(-22, -4); ctx.lineTo(-22, 4); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#e2a97c'; ctx.beginPath(); ctx.arc(-34, 0, 6.5, 0, 7); ctx.fill();
+    ctx.fillStyle = '#3a2a1a'; ctx.beginPath(); ctx.arc(-35.5, 0, 6.5, Math.PI * .5, Math.PI * 1.5); ctx.fill();
+    ctx.restore();
+  }
+
+  // ---------- hero panel ----------
+  const HSTATS = [
+    ['vit', 'Живучесть', () => 'макс. здоровье ' + maxHp() + ', меньше урона'],
+    ['str', 'Сила', () => 'урон копья и пушки +' + strBonus()],
+    ['agi', 'Ловкость', () => 'скорость и копание +' + Math.round(hero.agi * 3) + '%'],
+    ['end', 'Выносливость', () => 'воздух ' + O2MAX + ' с, голод медленнее']
+  ];
+  function updateHeroBtn() { $('heroBtn').textContent = '⭐ ' + hero.level + (hero.pts > 0 ? ' ➕' : ''); }
+  function renderHero() {
+    const need = xpNeed(hero.level), pr = hero.level >= MAXLV ? 100 : Math.min(100, hero.xp / need * 100);
+    let h = `<p><b>Уровень ${hero.level}</b>${hero.level >= MAXLV ? ' (максимум)' : ' · опыт ' + hero.xp + '/' + need}<br>Очки героя: <b>${hero.pts}</b></p>`;
+    h += `<div class="xpbar"><i style="width:${pr}%"></i></div>`;
+    for (const [k, nm, ds] of HSTATS) {
+      h += `<div class="crow"><span><b>${nm}</b> ${hero[k]}<br><small>${ds()}</small></span><button data-s="${k}" ${hero.pts > 0 ? '' : 'disabled'}>+</button></div>`;
+    }
+    h += '<h3 style="margin:14px 0 6px">Броня</h3>';
+    const armors = [[0, 'Без брони', 'нет защиты', true], [1, 'Бронзовая', 'урон −15%', inv.arm >= 1], [2, 'Серебряная', 'урон −30%', inv.arm >= 2], [3, 'Антимагическая', 'магия −65%, остальное −15%', inv.am > 0]];
+    for (const [id, nm, ds, has] of armors) {
+      if (has) h += `<div class="crow"><span><b>${nm}</b><br><small>${ds}</small></span><button data-e="${id}" ${equip === id ? 'disabled' : ''}>${equip === id ? 'Надета' : 'Надеть'}</button></div>`;
+    }
+    $('heroRows').innerHTML = h;
+  }
+  $('heroBtn').addEventListener('click', () => { renderHero(); $('heroUI').hidden = false; });
+  $('heroClose').addEventListener('click', () => { $('heroUI').hidden = true; });
+  $('heroRows').addEventListener('click', e => {
+    const eb = e.target.closest('button[data-e]');
+    if (eb && !eb.disabled) { equip = +eb.dataset.e; renderHero(); return; }
+    const b = e.target.closest('button[data-s]');
+    if (!b || b.disabled || hero.pts < 1) return;
+    hero[b.dataset.s]++; hero.pts--;
+    recalc();
+    if (b.dataset.s === 'vit') stats.hp = Math.min(maxHp(), stats.hp + 12);
+    updateHud(); renderHero();
+  });
+
+  // ---------- skeleton island: loot, boss, arrows, drawing ----------
+  function killLandMob(a) {
+    const parts = [];
+    if (a.drop) { inv.meat += a.drop; parts.push('+' + a.drop + ' 🥩'); }
+    if (a.gold && rnd() < a.goldChance) { inv.gold += a.gold; parts.push('+' + a.gold + ' 🟡'); }
+    if (parts.length) floats.push({ x: a.x, y: a.y - 24, txt: parts.join(' '), life: 1.5 });
+    if (isBoss(a)) {
+      if (a.night) bossDownN[isl.id] = true; else bossDown[isl.id] = true;
+      isl.animals = isl.animals.filter(m => m !== a);
+      arrows = []; zones = [];
+      let msg;
+      if (a.night) { hero.pts += 3; msg = a.name + ' повержен! Вы получили +3 очка героя.'; }
+      else if (a.type === 'boss') { perks.crown = true; msg = 'Король скелетов повержен! Вы получили Корону скелетов (урон +2).'; }
+      else if (a.type === 'archmage') { inv.am = 1; equip = 3; msg = 'Архимаг повержен! Выпала Антимагическая броня: она надета (магический урон -65%).'; }
+      else if (a.type === 'rotlord') { perks.cure = true; infect = 0; msg = 'Повелитель гнили повержен! Вы получили Иммунитет: заражение больше не действует.'; }
+      else { perks.warm = true; chill = 0; msg = 'Королева теней повержена! Вы получили Тёплый плащ: холод больше не действует.'; }
+      updateHud();
+      gainXp(a.xp);
+      toast(msg);
+      return;
+    }
+    updateHud();
+    gainXp(a.xp);
+  }
+  function updateSkelAI(dt) {
+    if (isl.danger) {
+      for (const a of isl.animals) {
+        if (a.asleep) continue;
+        if (a.ghostly) {
+          a.phT -= dt;
+          if (a.phT <= 0) { a.solid = !a.solid; a.phT = a.type === 'queen' ? (a.solid ? 5 : 3) : (a.solid ? 2.6 : 3); }
+        }
+        if ((a.type === 'zombie' || a.type === 'runner') && !a.chasing) {
+          for (const o of isl.animals) {
+            if (o.chasing && (o.type === 'zombie' || o.type === 'runner' || o.type === 'rotlord') && Math.hypot(o.x - a.x, o.y - a.y) < 260) { a.chasing = true; break; }
+          }
+        }
+        const dxp = p.x - a.x, dyp = p.y - a.y, dp = Math.hypot(dxp, dyp) || 1;
+        if (a.type === 'archer') {
+          a.shootCd -= dt;
+          if (a.chasing && dp < 330 && a.shootCd <= 0) {
+            a.shootCd = 2.2;
+            const ang = Math.atan2(dyp, dxp);
+            arrows.push({ x: a.x, y: a.y - 18, vx: Math.cos(ang) * 300, vy: Math.sin(ang) * 300, life: 1.4, dmg: a.dmg });
+          }
+        } else if (a.type === 'wraith') {
+          a.shootCd -= dt;
+          if (a.chasing && dp < 340 && a.shootCd <= 0) {
+            a.shootCd = 2.4;
+            const ang = Math.atan2(p.y - 16 - (a.y - 18), p.x - a.x);
+            arrows.push({ x: a.x, y: a.y - 18, vx: Math.cos(ang) * 210, vy: Math.sin(ang) * 210, life: 1.9, dmg: a.dmg, kind: 'frost' });
+          }
+        } else if (a.type === 'queen') {
+          a.slamCd -= dt; a.ringCd -= dt; a.sumT -= dt;
+          if (!a.phase2 && a.hp < a.maxhp * .5) { a.phase2 = true; toast('Королева теней в ярости!'); }
+          if (a.slam > 0) {
+            a.slam -= dt;
+            if (a.slam <= 0) {
+              a.slamCd = 3.2;
+              if (Math.hypot(p.x - a.x, p.y - a.y) < a.r + 150 && p.inv <= 0) {
+                p.inv = .8;
+                const v = hurt(22, true);
+                floats.push({ x: p.x, y: p.y - 40, txt: '-' + v, life: 1 });
+                hurtFlash();
+                if (!perks.warm) chill = Math.max(chill, 6);
+              }
+            }
+          } else if (a.chasing && a.solid && dp < a.r + 140 && a.slamCd <= 0) a.slam = 1.0;
+          if (a.ringCd <= 0) {
+            a.ringCd = (a.phase2 ? 3.6 : 5) * (a.night ? .75 : 1);
+            const n = (a.phase2 ? 12 : 8) + (a.night ? 4 : 0), off = rnd() * 6.28;
+            for (let k = 0; k < n; k++) {
+              const ang = off + k / n * 6.28;
+              arrows.push({ x: a.x, y: a.y - 20, vx: Math.cos(ang) * 165, vy: Math.sin(ang) * 165, life: 2.4, dmg: 11, kind: 'frost' });
+            }
+          }
+          if (a.sumT <= 0) {
+            a.sumT = (a.phase2 ? 7 : 11) * (a.night ? .7 : 1);
+            if (isl.animals.filter(m => m.type === 'ghost').length < 8) {
+              for (let k = 0; k < 3; k++) {
+                const an = makeAnimal(isl, 'ghost', null);
+                if (an) { const ang = rnd() * 7; an.x = a.x + Math.cos(ang) * 90; an.y = a.y + Math.sin(ang) * 90; an.chasing = true; isl.animals.push(an); }
+              }
+              toast('Тени восстают!');
+            }
+          }
+        } else if (a.type === 'mage') {
+          a.shootCd -= dt; a.blinkCd -= dt;
+          if (a.chasing && dp < 360 && a.shootCd <= 0) {
+            a.shootCd = 2.6;
+            const ang = Math.atan2(p.y - 16 - (a.y - 18), p.x - a.x);
+            arrows.push({ x: a.x, y: a.y - 18, vx: Math.cos(ang) * 230, vy: Math.sin(ang) * 230, life: 1.8, dmg: a.dmg, kind: 'fire' });
+          }
+          if (a.chasing && dp < 130 && a.blinkCd <= 0) {
+            a.blinkCd = 5;
+            for (let tries = 0; tries < 12; tries++) {
+              const ang = rnd() * 6.28, d = 200 + rnd() * 60, nx = p.x + Math.cos(ang) * d, ny = p.y + Math.sin(ang) * d;
+              if (Math.hypot(nx, ny) < isl.radiusAt(nx, ny) - 70) {
+                floats.push({ x: a.x, y: a.y - 30, txt: '✦', life: .6 });
+                a.x = nx; a.y = ny;
+                floats.push({ x: a.x, y: a.y - 30, txt: '✦', life: .6 });
+                break;
+              }
+            }
+          }
+        } else if (a.type === 'archmage') {
+          a.ringCd -= dt; a.meteorCd -= dt; a.blinkCd -= dt;
+          if (!a.phase2 && a.hp < a.maxhp * .5) { a.phase2 = true; toast('Архимаг в ярости!'); }
+          if (a.ringCd <= 0) {
+            a.ringCd = (a.phase2 ? 3.2 : 4.5) * (a.night ? .75 : 1);
+            const n = (a.phase2 ? 12 : 8) + (a.night ? 4 : 0), off = rnd() * 6.28;
+            for (let k = 0; k < n; k++) {
+              const ang = off + k / n * 6.28;
+              arrows.push({ x: a.x, y: a.y - 20, vx: Math.cos(ang) * 170, vy: Math.sin(ang) * 170, life: 2.4, dmg: 12, kind: 'orb' });
+            }
+          }
+          if (a.meteorCd <= 0) {
+            a.meteorCd = a.phase2 ? 3 : 5;
+            for (let k = 0; k < (a.phase2 ? 2 : 1) + (a.night ? 1 : 0); k++) {
+              zones.push({ x: p.x + (k ? (rnd() - .5) * 180 : 0), y: p.y + (k ? (rnd() - .5) * 180 : 0), r: 70, t: 1.1, dur: 1.1, dmg: 28, done: false, life: .25 });
+            }
+          }
+          if (a.blinkCd <= 0 && dp < 170) {
+            a.blinkCd = 6;
+            for (let tries = 0; tries < 12; tries++) {
+              const ang = rnd() * 6.28, nx = a.x + Math.cos(ang) * 260, ny = a.y + Math.sin(ang) * 260;
+              if (Math.hypot(nx, ny) < isl.radiusAt(nx, ny) - 90) {
+                floats.push({ x: a.x, y: a.y - 40, txt: '✦', life: .6 });
+                a.x = nx; a.y = ny;
+                floats.push({ x: a.x, y: a.y - 40, txt: '✦', life: .6 });
+                break;
+              }
+            }
+          }
+          if (a.phase2) {
+            a.sumT -= dt;
+            if (a.sumT <= 0) {
+              a.sumT = 14;
+              if (isl.animals.filter(m => m.type === 'mage').length < 4) {
+                for (let k = 0; k < 2; k++) {
+                  const an = makeAnimal(isl, 'mage', null);
+                  if (an) { const ang = rnd() * 7; an.x = a.x + Math.cos(ang) * 80; an.y = a.y + Math.sin(ang) * 80; an.chasing = true; isl.animals.push(an); }
+                }
+                toast('Архимаг призывает учеников!');
+              }
+            }
+          }
+        } else if (a.type === 'rotlord') {
+          a.slamCd -= dt; a.meteorCd -= dt; a.sumT -= dt;
+          if (!a.phase2 && a.hp < a.maxhp * .5) { a.phase2 = true; toast('Повелитель гнили взревел!'); }
+          if (a.slam > 0) {
+            a.slam -= dt;
+            if (a.slam <= 0) {
+              a.slamCd = 2.6;
+              if (Math.hypot(p.x - a.x, p.y - a.y) < a.r + 110 && p.inv <= 0) {
+                p.inv = .8;
+                const v = hurt(26);
+                floats.push({ x: p.x, y: p.y - 40, txt: '-' + v, life: 1 });
+                hurtFlash();
+                if (!perks.cure) infect = Math.max(infect, 10);
+              }
+            }
+          } else if (a.chasing && dp < a.r + 100 && a.slamCd <= 0) a.slam = .9;
+          if (a.meteorCd <= 0) {
+            a.meteorCd = a.phase2 ? 3 : 4.5;
+            for (let k = 0; k < (a.phase2 ? 2 : 1) + (a.night ? 1 : 0); k++) {
+              zones.push({ kind: 'acid', x: p.x + (k ? (rnd() - .5) * 200 : 0), y: p.y + (k ? (rnd() - .5) * 200 : 0), r: 62, t: .8, dur: .8, dmg: 0, done: false, life: 5.5 });
+            }
+          }
+          if (a.sumT <= 0) {
+            a.sumT = (a.phase2 ? 7 : 11) * (a.night ? .7 : 1);
+            if (isl.animals.filter(m => m.type === 'zombie' || m.type === 'runner').length < 9) {
+              for (let k = 0; k < 3; k++) {
+                const an = makeAnimal(isl, a.phase2 && k === 0 ? 'runner' : 'zombie', null);
+                if (an) { const ang = rnd() * 7; an.x = a.x + Math.cos(ang) * 90; an.y = a.y + Math.sin(ang) * 90; an.chasing = true; isl.animals.push(an); }
+              }
+              toast('Из земли лезут зомби!');
+            }
+          }
+        } else if (a.type === 'boss') {
+          a.slamCd -= dt;
+          if (!a.phase2 && a.hp < a.maxhp * .5) { a.phase2 = true; toast('Король скелетов в ярости!'); }
+          if (a.slam > 0) {
+            a.slam -= dt;
+            if (a.slam <= 0) {
+              a.slamCd = 2.4;
+              if (Math.hypot(p.x - a.x, p.y - a.y) < a.r + 110 && p.inv <= 0) {
+                p.inv = .8;
+                const v = hurt(26);
+                floats.push({ x: p.x, y: p.y - 40, txt: '-' + v, life: 1 });
+                hurtFlash();
+              }
+            }
+          } else if (a.chasing && dp < a.r + 100 && a.slamCd <= 0) a.slam = .9;
+          if (a.phase2) {
+            a.sumT -= dt;
+            if (a.sumT <= 0) {
+              a.sumT = a.night ? 6 : 9;
+              if (isl.animals.filter(m => m.type === 'skeleton').length < 6) {
+                for (let k = 0; k < (a.night ? 3 : 2); k++) {
+                  const an = makeAnimal(isl, k === 2 ? 'archer' : 'skeleton', null);
+                  if (an) { const ang = rnd() * 7; an.x = a.x + Math.cos(ang) * 70; an.y = a.y + Math.sin(ang) * 70; an.chasing = true; isl.animals.push(an); }
+                }
+                toast('Король скелетов призывает слуг!');
+              }
+            }
+          }
+        }
+      }
+    }
+    for (let i = zones.length - 1; i >= 0; i--) {
+      const z = zones[i];
+      if (!z.done) {
+        z.t -= dt;
+        if (z.t <= 0) {
+          z.done = true;
+          if (z.kind !== 'acid' && Math.hypot(p.x - z.x, p.y - z.y) < z.r && p.inv <= 0) {
+            p.inv = .8;
+            const v = hurt(z.dmg, true);
+            floats.push({ x: p.x, y: p.y - 40, txt: '-' + v, life: 1 });
+            hurtFlash();
+          }
+        }
+      } else {
+        z.life -= dt;
+        if (z.kind === 'acid' && Math.hypot(p.x - z.x, p.y - z.y) < z.r) {
+          stats.hp -= 7 * dt * armorMult(false);
+          if (!perks.cure) infect = Math.max(infect, 8);
+        }
+        if (z.life <= 0) zones.splice(i, 1);
+      }
+    }
+    for (let i = arrows.length - 1; i >= 0; i--) {
+      const ar = arrows[i]; ar.life -= dt; ar.x += ar.vx * dt; ar.y += ar.vy * dt;
+      if (Math.hypot(ar.x - p.x, ar.y - (p.y - 16)) < 18 && p.inv <= 0) {
+        p.inv = .6;
+        const v = hurt(ar.dmg, ar.kind === 'fire' || ar.kind === 'orb' || ar.kind === 'frost');
+        if (ar.kind === 'frost' && !perks.warm) chill = Math.max(chill, 4);
+        floats.push({ x: p.x, y: p.y - 40, txt: '-' + v, life: 1 });
+        hurtFlash();
+        arrows.splice(i, 1);
+      } else if (ar.life <= 0) arrows.splice(i, 1);
+    }
+  }
+  function drawDeadTree(tr, t) {
+    ctx.fillStyle = 'rgba(0,0,0,.18)';
+    ctx.beginPath(); ctx.ellipse(tr.x + 8, tr.y + 4, 22, 8, 0, 0, 7); ctx.fill();
+    const tx = tr.x + tr.lean, ty = tr.y - tr.h;
+    ctx.strokeStyle = tr.pale ? '#9aa6bd' : '#4b4036'; ctx.lineWidth = 8; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(tr.x, tr.y); ctx.quadraticCurveTo(tr.x + tr.lean * 1.2, tr.y - tr.h * .5, tx, ty); ctx.stroke();
+    ctx.lineWidth = 4;
+    for (let k = 0; k < 4; k++) {
+      const a = -2.6 + k * .75 + Math.sin(tr.ph + k) * .2, len = 24 + (k % 2) * 10, by = ty + (k % 2) * 12;
+      ctx.beginPath(); ctx.moveTo(tx, by); ctx.lineTo(tx + Math.cos(a) * len, by + Math.sin(a) * len * .7); ctx.stroke();
+    }
+  }
+  function drawSkel(a, t) {
+    const boss = a.type === 'boss', sc = (boss ? 1.6 : 1) * (a.night ? 1.12 : 1), hit = a.hitT > 0;
+    const dir = Math.cos(a.ang) >= 0 ? 1 : -1;
+    if (boss && a.slam > 0) {
+      ctx.fillStyle = 'rgba(220,40,40,' + (.12 + .1 * Math.sin(t * 18)) + ')';
+      ctx.beginPath(); ctx.arc(a.x, a.y, a.r + 110, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,80,60,.85)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(a.x, a.y, a.r + 110, 0, 7); ctx.stroke();
+    }
+    ctx.save(); ctx.translate(a.x, a.y); ctx.scale(dir * sc, sc);
+    ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.beginPath(); ctx.ellipse(0, 2, 13, 5, 0, 0, 7); ctx.fill();
+    const bone = hit ? '#ffffff' : '#e9e4d2';
+    const step = Math.sin(t * 10 + a.ph) * (a.chasing && !a.asleep ? 3 : 0);
+    if (boss) {
+      ctx.fillStyle = '#5a2d7a';
+      ctx.beginPath(); ctx.moveTo(-8, -28); ctx.lineTo(-18, 2); ctx.lineTo(4, 2); ctx.lineTo(6, -28); ctx.closePath(); ctx.fill();
+    }
+    ctx.strokeStyle = bone; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-4, -8); ctx.lineTo(-4 + step, 0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(4, -8); ctx.lineTo(4 - step, 0); ctx.stroke();
+    ctx.fillStyle = bone;
+    ctx.beginPath(); ctx.ellipse(0, -18, 8, 11, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(60,50,40,.55)'; ctx.lineWidth = 1.5;
+    for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(-6, -23 + k * 5); ctx.lineTo(6, -23 + k * 5); ctx.stroke(); }
+    ctx.strokeStyle = bone; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(7, -22); ctx.lineTo(13, -16); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-7, -22); ctx.lineTo(-11, -14); ctx.stroke();
+    if (a.type === 'archer') {
+      ctx.strokeStyle = '#8a5a2b'; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(14, -17, 12, -1.2, 1.2); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(14 + Math.cos(-1.2) * 12, -17 + Math.sin(-1.2) * 12); ctx.lineTo(14 + Math.cos(1.2) * 12, -17 + Math.sin(1.2) * 12); ctx.stroke();
+    } else {
+      const sw = (a.cd > 0 && a.cd < .4) ? -.8 : 0;
+      ctx.save(); ctx.translate(13, -16); ctx.rotate(sw);
+      ctx.strokeStyle = '#8f9499'; ctx.lineWidth = boss ? 4 : 3;
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -22); ctx.stroke();
+      ctx.strokeStyle = '#6b431f'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(-4, -2); ctx.lineTo(4, -2); ctx.stroke();
+      ctx.restore();
+    }
+    ctx.fillStyle = bone;
+    ctx.beginPath(); ctx.arc(0, -34, 8, 0, 7); ctx.fill();
+    ctx.fillRect(-4, -28, 8, 3);
+    ctx.fillStyle = a.asleep ? '#444' : (a.chasing || boss ? '#ff3b2f' : '#222');
+    ctx.beginPath(); ctx.arc(-3, -35, 2.2, 0, 7); ctx.arc(3, -35, 2.2, 0, 7); ctx.fill();
+    if (boss) {
+      ctx.fillStyle = '#f2cf4a';
+      ctx.beginPath(); ctx.moveTo(-8, -41); ctx.lineTo(-8, -50); ctx.lineTo(-4, -45); ctx.lineTo(0, -52); ctx.lineTo(4, -45); ctx.lineTo(8, -50); ctx.lineTo(8, -41); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+    if (!boss && a.hp < a.maxhp) {
+      ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(a.x - 14, a.y - 52, 28, 4);
+      ctx.fillStyle = '#e0533f'; ctx.fillRect(a.x - 14, a.y - 52, 28 * Math.max(0, a.hp) / a.maxhp, 4);
+    }
+  }
+  function drawArrows() {
+    ctx.lineCap = 'round';
+    for (const ar of arrows) {
+      if (ar.kind === 'fire' || ar.kind === 'orb' || ar.kind === 'frost') {
+        const col = ar.kind === 'fire' ? '255,140,40' : ar.kind === 'frost' ? '140,220,255' : '170,110,255';
+        ctx.fillStyle = 'rgba(' + col + ',.25)'; ctx.beginPath(); ctx.arc(ar.x, ar.y, 14, 0, 7); ctx.fill();
+        ctx.fillStyle = 'rgba(' + col + ',.95)'; ctx.beginPath(); ctx.arc(ar.x, ar.y, 7, 0, 7); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.beginPath(); ctx.arc(ar.x, ar.y, 3, 0, 7); ctx.fill();
+        continue;
+      }
+      const m = Math.hypot(ar.vx, ar.vy) || 1, ux = ar.vx / m, uy = ar.vy / m;
+      ctx.strokeStyle = '#d8cfae'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(ar.x - ux * 14, ar.y - uy * 14); ctx.lineTo(ar.x, ar.y); ctx.stroke();
+      ctx.fillStyle = '#8b8f94';
+      ctx.beginPath(); ctx.moveTo(ar.x + ux * 6, ar.y + uy * 6); ctx.lineTo(ar.x - uy * 3, ar.y + ux * 3); ctx.lineTo(ar.x + uy * 3, ar.y - ux * 3); ctx.closePath(); ctx.fill();
+    }
+  }
+  function drawZones(t) {
+    for (const z of zones) {
+      if (z.kind === 'acid') {
+        if (!z.done) {
+          const pr = 1 - z.t / z.dur;
+          ctx.fillStyle = 'rgba(120,220,60,' + (.1 + .15 * pr) + ')'; ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, 7); ctx.fill();
+          ctx.strokeStyle = 'rgba(160,255,90,.8)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(z.x, z.y, z.r * pr, 0, 7); ctx.stroke();
+        } else {
+          const fade = Math.min(1, z.life);
+          ctx.fillStyle = 'rgba(110,200,50,' + (.38 * fade) + ')'; ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, 7); ctx.fill();
+          ctx.strokeStyle = 'rgba(180,255,100,' + (.6 * fade) + ')'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, 7); ctx.stroke();
+          ctx.fillStyle = 'rgba(210,255,140,' + (.5 * fade) + ')';
+          for (let k = 0; k < 4; k++) {
+            const a = k * 1.7 + t * .8, rr = z.r * .55 * (.4 + .6 * ((t * .7 + k * .3) % 1));
+            ctx.beginPath(); ctx.arc(z.x + Math.cos(a) * rr, z.y + Math.sin(a) * rr, 3 + (k % 2) * 2, 0, 7); ctx.fill();
+          }
+        }
+        continue;
+      }
+      if (!z.done) {
+        const pr = 1 - z.t / z.dur;
+        ctx.fillStyle = 'rgba(255,90,40,' + (.12 + .18 * pr) + ')'; ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, 7); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,130,60,.9)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, 7); ctx.stroke();
+        ctx.beginPath(); ctx.arc(z.x, z.y, z.r * pr, 0, 7); ctx.stroke();
+      } else {
+        ctx.fillStyle = 'rgba(255,230,160,' + (Math.max(0, z.life / .25) * .8) + ')'; ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, 7); ctx.fill();
+      }
+    }
+  }
+  function drawZombie(a, t) {
+    const boss = a.type === 'rotlord', run = a.type === 'runner', sc = (boss ? 1.7 : 1) * (a.night ? 1.12 : 1), hit = a.hitT > 0;
+    const dir = Math.cos(a.ang) >= 0 ? 1 : -1;
+    if (boss && a.slam > 0) {
+      ctx.fillStyle = 'rgba(120,220,60,' + (.12 + .1 * Math.sin(t * 18)) + ')';
+      ctx.beginPath(); ctx.arc(a.x, a.y, a.r + 110, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(170,255,90,.85)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(a.x, a.y, a.r + 110, 0, 7); ctx.stroke();
+    }
+    ctx.save(); ctx.translate(a.x, a.y); ctx.scale(dir * sc, sc);
+    ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.beginPath(); ctx.ellipse(0, 2, 13, 5, 0, 0, 7); ctx.fill();
+    const step = Math.sin(t * (run ? 14 : 6) + a.ph) * (a.chasing ? 4 : 1.5);
+    ctx.strokeStyle = '#3d4a3a'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-4, -8); ctx.lineTo(-4 + step, 0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(4, -8); ctx.lineTo(4 - step, 0); ctx.stroke();
+    ctx.save(); if (run && a.chasing) ctx.rotate(.15);
+    ctx.fillStyle = hit ? '#ffffff' : (boss ? '#5f7a3f' : '#7a9a6a');
+    ctx.beginPath(); ctx.ellipse(0, -17, 9, 12, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = hit ? '#ffffff' : '#6b5b4a';
+    ctx.fillRect(-8, -14, 16, 8);
+    ctx.strokeStyle = hit ? '#ffffff' : (boss ? '#5f7a3f' : '#7a9a6a'); ctx.lineWidth = 3.5;
+    ctx.beginPath(); ctx.moveTo(6, -23); ctx.lineTo(20, -25 + step * .3); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(6, -18); ctx.lineTo(19, -18 - step * .3); ctx.stroke();
+    ctx.fillStyle = hit ? '#ffffff' : '#9bb58a';
+    ctx.beginPath(); ctx.arc(0, -33, 7.5, 0, 7); ctx.fill();
+    ctx.fillStyle = a.chasing || boss ? '#ffe04a' : '#444';
+    ctx.beginPath(); ctx.arc(-2.5, -34, 1.8, 0, 7); ctx.arc(2.5, -34, 1.8, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#2d3a28'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(-3, -30); ctx.lineTo(3, -30); ctx.stroke();
+    if (boss) {
+      ctx.fillStyle = 'rgba(70,120,40,.9)';
+      ctx.beginPath(); ctx.arc(-6, -20, 4, 0, 7); ctx.arc(5, -12, 3.5, 0, 7); ctx.arc(2, -38, 3, 0, 7); ctx.fill();
+      ctx.fillStyle = '#d8d0b0';
+      ctx.beginPath(); ctx.moveTo(-5, -39); ctx.lineTo(-8, -48); ctx.lineTo(-2, -40); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(5, -39); ctx.lineTo(8, -48); ctx.lineTo(2, -40); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+    ctx.restore();
+    if (!boss && a.hp < a.maxhp) {
+      ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(a.x - 14, a.y - 52, 28, 4);
+      ctx.fillStyle = '#e0533f'; ctx.fillRect(a.x - 14, a.y - 52, 28 * Math.max(0, a.hp) / a.maxhp, 4);
+    }
+  }
+  function drawCrystalTree(tr, t) {
+    ctx.fillStyle = 'rgba(0,0,0,.18)';
+    ctx.beginPath(); ctx.ellipse(tr.x + 8, tr.y + 4, 24, 8, 0, 0, 7); ctx.fill();
+    const glow = .25 + .12 * Math.sin(t * 2 + tr.ph);
+    ctx.fillStyle = 'rgba(150,120,255,' + glow + ')';
+    ctx.beginPath(); ctx.arc(tr.x, tr.y - 24, 34, 0, 7); ctx.fill();
+    const shards = [[-12, 0, 16, 46, '#8e6bff'], [0, 4, 20, 62, '#7fd6ff'], [13, 0, 14, 40, '#b48cff']];
+    for (const [dx, dy, w, h, c] of shards) {
+      const x = tr.x + dx, y = tr.y + dy;
+      ctx.fillStyle = c;
+      ctx.beginPath(); ctx.moveTo(x, y - h); ctx.lineTo(x + w / 2, y - h * .45); ctx.lineTo(x + w / 3, y); ctx.lineTo(x - w / 3, y); ctx.lineTo(x - w / 2, y - h * .45); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.4)';
+      ctx.beginPath(); ctx.moveTo(x, y - h); ctx.lineTo(x - w / 2, y - h * .45); ctx.lineTo(x - w / 6, y - h * .3); ctx.closePath(); ctx.fill();
+    }
+  }
+  function drawMage(a, t) {
+    const boss = a.type === 'archmage', sc = (boss ? 1.6 : 1) * (a.night ? 1.12 : 1), hit = a.hitT > 0;
+    const dir = Math.cos(a.ang) >= 0 ? 1 : -1;
+    ctx.save(); ctx.translate(a.x, a.y); ctx.scale(dir * sc, sc);
+    ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.beginPath(); ctx.ellipse(0, 2, 13, 5, 0, 0, 7); ctx.fill();
+    const bob = Math.sin(t * 3 + a.ph) * 2.5 - 4;
+    const robe = hit ? '#ffffff' : (boss ? '#2f5fb3' : '#6a3fb0');
+    ctx.fillStyle = robe;
+    ctx.beginPath(); ctx.moveTo(-7, -26 + bob); ctx.lineTo(7, -26 + bob); ctx.lineTo(15, -2 + bob); ctx.lineTo(-15, -2 + bob); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = boss ? '#f2cf4a' : '#c9a8ff';
+    ctx.fillRect(-14, -6 + bob, 28, 3);
+    ctx.fillStyle = '#e2c9a8';
+    ctx.beginPath(); ctx.arc(0, -33 + bob, 7, 0, 7); ctx.fill();
+    ctx.fillStyle = a.asleep ? '#444' : '#7af0ff';
+    ctx.beginPath(); ctx.arc(-2.5, -33 + bob, 1.8, 0, 7); ctx.arc(2.5, -33 + bob, 1.8, 0, 7); ctx.fill();
+    ctx.fillStyle = robe;
+    ctx.beginPath(); ctx.moveTo(-10, -38 + bob); ctx.lineTo(10, -38 + bob); ctx.lineTo(0, -62 + bob); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0, -38 + bob, 12, 3.5, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#ffe36b'; ctx.beginPath(); ctx.arc(0, -50 + bob, 2, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#6b431f'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(14, -4 + bob); ctx.lineTo(14, -38 + bob); ctx.stroke();
+    const charge = a.shootCd < .5 || a.ringCd < .5;
+    ctx.fillStyle = charge ? '#ffffff' : (boss ? '#b48cff' : '#ff9a4a');
+    ctx.beginPath(); ctx.arc(14, -41 + bob, charge ? 6 : 4.5, 0, 7); ctx.fill();
+    ctx.restore();
+    if (!boss && a.hp < a.maxhp) {
+      ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(a.x - 14, a.y - 66, 28, 4);
+      ctx.fillStyle = '#e0533f'; ctx.fillRect(a.x - 14, a.y - 66, 28 * Math.max(0, a.hp) / a.maxhp, 4);
+    }
+  }
+  function drawGolem(a, t) {
+    const hit = a.hitT > 0;
+    const dir = Math.cos(a.ang) >= 0 ? 1 : -1;
+    ctx.save(); ctx.translate(a.x, a.y); ctx.scale(dir, 1);
+    ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(0, 3, 22, 7, 0, 0, 7); ctx.fill();
+    const step = Math.sin(t * 6 + a.ph) * (a.chasing ? 3 : 0);
+    const stone = hit ? '#ffffff' : '#7f8da3', dark = hit ? '#ffffff' : '#5d6a7e';
+    ctx.fillStyle = dark;
+    ctx.fillRect(-14, -12, 10, 12 + step * .3); ctx.fillRect(4, -12, 10, 12 - step * .3);
+    ctx.fillStyle = stone;
+    ctx.beginPath(); ctx.ellipse(0, -26, 17, 18, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = dark;
+    ctx.beginPath(); ctx.arc(-21, -24 + step * .4, 9, 0, 7); ctx.arc(21, -24 - step * .4, 9, 0, 7); ctx.fill();
+    ctx.fillStyle = stone; ctx.fillRect(-9, -52, 18, 15);
+    ctx.fillStyle = '#7af0ff'; ctx.fillRect(-6, -47, 4, 4); ctx.fillRect(2, -47, 4, 4);
+    ctx.fillStyle = 'rgba(122,240,255,' + (.6 + .3 * Math.sin(t * 3 + a.ph)) + ')';
+    ctx.beginPath(); ctx.moveTo(0, -34); ctx.lineTo(5, -26); ctx.lineTo(0, -18); ctx.lineTo(-5, -26); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    if (a.hp < a.maxhp) {
+      ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(a.x - 16, a.y - 60, 32, 4);
+      ctx.fillStyle = '#e0533f'; ctx.fillRect(a.x - 16, a.y - 60, 32 * Math.max(0, a.hp) / a.maxhp, 4);
+    }
+  }
+  function drawBossBar() {
+    const b = isl.animals.find(a => isBoss(a) && !a.asleep);
+    if (!b) return;
+    const nm = b.name || ANIMALS[b.type].name;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const w = Math.min(cv.width * .5, 320 * DPR), x = (cv.width - w) / 2, y = cv.height - 34 * DPR;
+    ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(x - 3 * DPR, y - 3 * DPR, w + 6 * DPR, 14 * DPR);
+    ctx.fillStyle = b.phase2 ? '#ff5a3a' : '#c03a2a'; ctx.fillRect(x, y, w * Math.max(0, b.hp) / b.maxhp, 8 * DPR);
+    ctx.font = 'bold ' + (13 * DPR) + 'px -apple-system, sans-serif'; ctx.textAlign = 'center';
+    ctx.lineWidth = 3 * DPR; ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.strokeText(nm, cv.width / 2, y - 6 * DPR);
+    ctx.fillStyle = '#fff'; ctx.fillText(nm, cv.width / 2, y - 6 * DPR);
+  }
+
+  // ---------- ghost island drawing ----------
+  function drawDarkness(Z) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const sx = (W / 2 + (p.x - cam.x) * Z) * DPR, sy = (H / 2 + (p.y - 16 - cam.y) * Z) * DPR;
+    const rad = 380 * Z * DPR;
+    const g = ctx.createRadialGradient(sx, sy, rad * .18, sx, sy, rad);
+    g.addColorStop(0, 'rgba(5,10,40,0)'); g.addColorStop(.6, 'rgba(5,10,40,.35)'); g.addColorStop(1, 'rgba(5,10,40,.8)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, cv.width, cv.height);
+  }
+  function drawGhost(a, t) {
+    const boss = a.type === 'queen', wr = a.type === 'wraith', sc = (boss ? 1.7 : 1) * (a.night ? 1.12 : 1), hit = a.hitT > 0;
+    const dir = Math.cos(a.ang) >= 0 ? 1 : -1;
+    const solid = wr || a.solid || a.asleep;
+    const alpha = solid ? (wr ? .8 : .95) : .26 + .06 * Math.sin(t * 6 + a.ph);
+    if (boss && a.slam > 0) {
+      ctx.fillStyle = 'rgba(120,200,255,' + (.12 + .1 * Math.sin(t * 18)) + ')';
+      ctx.beginPath(); ctx.arc(a.x, a.y, a.r + 150, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(170,230,255,.85)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(a.x, a.y, a.r + 150, 0, 7); ctx.stroke();
+    }
+    ctx.save(); ctx.globalAlpha = alpha; ctx.translate(a.x, a.y); ctx.scale(dir * sc, sc);
+    ctx.fillStyle = 'rgba(0,0,0,.15)'; ctx.beginPath(); ctx.ellipse(0, 2, 12, 4, 0, 0, 7); ctx.fill();
+    const fl = Math.sin(t * 3 + a.ph) * 3 - 8;
+    const body = hit ? '#ffffff' : (wr ? '#3f7f86' : (boss ? '#9ab3ff' : '#d6e6ff'));
+    ctx.fillStyle = body;
+    ctx.beginPath(); ctx.moveTo(-9, -26 + fl); ctx.quadraticCurveTo(-13, -8 + fl, -12, 0 + fl);
+    for (let k = 0; k < 4; k++) ctx.lineTo(-12 + (k + .5) * 6, (k % 2 ? -4 : 3) + fl + Math.sin(t * 5 + k) * 2);
+    ctx.lineTo(12, 0 + fl); ctx.quadraticCurveTo(13, -8 + fl, 9, -26 + fl);
+    ctx.arc(0, -27 + fl, 9, 0, Math.PI, true);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = wr ? '#143b40' : '#1b2440';
+    ctx.beginPath(); ctx.ellipse(-3.2, -28 + fl, 2, 3, 0, 0, 7); ctx.ellipse(3.2, -28 + fl, 2, 3, 0, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0, -22 + fl, 2, 3, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = body; ctx.lineWidth = 3.5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(8, -18 + fl); ctx.lineTo(18, -14 + fl + Math.sin(t * 4 + a.ph) * 2); ctx.stroke();
+    if (wr) {
+      ctx.fillStyle = 'rgba(160,230,255,.9)'; ctx.beginPath(); ctx.arc(20, -16 + fl, 4, 0, 7); ctx.fill();
+    }
+    if (boss) {
+      ctx.fillStyle = '#c8d8ff';
+      ctx.beginPath(); ctx.moveTo(-8, -35 + fl); ctx.lineTo(-8, -44 + fl); ctx.lineTo(-4, -39 + fl); ctx.lineTo(0, -46 + fl); ctx.lineTo(4, -39 + fl); ctx.lineTo(8, -44 + fl); ctx.lineTo(8, -35 + fl); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+    if (!boss && a.hp < a.maxhp) {
+      ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(a.x - 14, a.y - 52, 28, 4);
+      ctx.fillStyle = '#e0533f'; ctx.fillRect(a.x - 14, a.y - 52, 28 * Math.max(0, a.hp) / a.maxhp, 4);
+    }
+  }
+
+  // ---------- day/night bosses ----------
+  const NIGHT_NAMES = { boss: 'Проклятый полководец', archmage: 'Лунный чародей', rotlord: 'Чумной титан', queen: 'Жнец ночи' };
+  let bossSyncT = 0, lastFurnRender = 0;
+  function makeBoss(I, type, night) {
+    const b = makeAnimal(I, type, null);
+    if (!b) return null;
+    b.x = 0; b.y = 0; b.asleep = true; b.solid = true; b.chasing = false;
+    b.name = ANIMALS[type].name;
+    if (night) {
+      b.night = true; b.name = NIGHT_NAMES[type];
+      b.maxhp = Math.round(b.maxhp * 1.6); b.hp = b.maxhp; b.dmg = Math.round(b.dmg * 1.35);
+      b.speed *= 1.1; b.chase *= 1.1; b.xp = Math.round(b.xp * 1.8); b.gold = b.gold * 2; b.r = Math.round(b.r * 1.1);
+    }
+    return b;
+  }
+  function syncBosses(I) {
+    if (!I || !I.bossType) return;
+    const night = isNight(), done = night ? bossDownN : bossDown;
+    for (const b of I.animals.filter(isBoss)) {
+      if (b.asleep && !!b.night !== night) I.animals = I.animals.filter(m => m !== b);
+    }
+    if (!I.animals.some(isBoss) && !done[I.id]) {
+      const nb = makeBoss(I, I.bossType, night);
+      if (nb) I.animals.push(nb);
+    }
+  }
+  function drawNightAura(a, t) {
+    ctx.fillStyle = 'rgba(190,40,90,' + (.16 + .08 * Math.sin(t * 3)) + ')';
+    ctx.beginPath(); ctx.arc(a.x, a.y, a.r * 2.4, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,90,140,.5)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(a.x, a.y, a.r * 2.4 + Math.sin(t * 4) * 4, 0, 7); ctx.stroke();
+  }
+
+  // ---------- weather / night overlay ----------
+  function drawEnv(t, Z, wx, wy, skipNight) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const nl = skipNight ? 0 : nightLevel();
+    if (nl > 0) {
+      const sx = (W / 2 + (wx - cam.x) * Z) * DPR, sy = (H / 2 + (wy - cam.y) * Z) * DPR, rad = 330 * Z * DPR;
+      const g = ctx.createRadialGradient(sx, sy, rad * .15, sx, sy, rad);
+      g.addColorStop(0, 'rgba(10,16,50,' + (.1 * nl) + ')');
+      g.addColorStop(.5, 'rgba(8,12,45,' + (.5 * nl) + ')');
+      g.addColorStop(1, 'rgba(6,9,36,' + (.78 * nl) + ')');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, cv.width, cv.height);
+    }
+    if (weather === 'rain') {
+      ctx.fillStyle = 'rgba(25,45,80,.16)'; ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.strokeStyle = 'rgba(190,215,255,.55)'; ctx.lineWidth = 1.3 * DPR; ctx.lineCap = 'round';
+      ctx.beginPath();
+      for (let i = 0; i < 120; i++) {
+        const x = ((i * .61803) % 1) * cv.width, y = ((i * .37 + t * (1.1 + (i % 5) * .12)) % 1) * cv.height;
+        ctx.moveTo(x, y); ctx.lineTo(x - 5 * DPR, y + 14 * DPR);
+      }
+      ctx.stroke();
+    } else if (weather === 'snow') {
+      ctx.fillStyle = 'rgba(230,240,255,.09)'; ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.fillStyle = 'rgba(255,255,255,.88)';
+      for (let i = 0; i < 90; i++) {
+        const x = (((i * .61803) % 1) + Math.sin(t * .6 + i) * .02) * cv.width, y = ((i * .211 + t * (.05 + (i % 4) * .02)) % 1) * cv.height;
+        ctx.beginPath(); ctx.arc(x, y, (1.4 + (i % 3)) * DPR, 0, 7); ctx.fill();
+      }
+    }
+  }
+
+  // ---------- house interior ----------
+  const ROOM = { x1: -230, x2: 230, y1: -105, y2: 150 };
+  const FURN = {
+    bed: { x1: -225, y1: -100, x2: -125, y2: -30 },
+    stove: { x1: 125, y1: -100, x2: 205, y2: -45 },
+    chest: { x1: 165, y1: 40, x2: 210, y2: 75 },
+    table: { x1: -70, y1: 0, x2: 40, y2: 48 }
+  };
+  function roomBlocked(x, y) {
+    if (x < ROOM.x1 + 12 || x > ROOM.x2 - 12 || y < ROOM.y1 + 6 || y > ROOM.y2) return true;
+    for (const k in FURN) { const r = FURN[k]; if (x > r.x1 - 10 && x < r.x2 + 10 && y > r.y1 - 6 && y < r.y2 + 10) return true; }
+    return false;
+  }
+  function enterHome() {
+    if (busy || scene !== 'island') return;
+    transition(() => {
+      savedPos = { x: p.x, y: p.y };
+      setScene('home');
+      p.x = 0; p.y = 118; cam.x = 0; cam.y = 0;
+      toast('Дом: кровать, печь для плавки, сундук и стул для отдыха.');
+    });
+  }
+  function leaveHome() {
+    if (busy || scene !== 'home') return;
+    transition(() => backToIsland(HX, HY + 26));
+  }
+  function sleep() {
+    if (busy) return;
+    if (nightLevel() < .3 && stats.hp > maxHp() * .6) { toast('Спать не хочется. Дождитесь вечера или поспите, когда устанете.'); return; }
+    transition(() => {
+      if (dayT > .5) dayNo++;
+      dayT = .02;
+      stats.hp = maxHp(); stats.food = Math.max(10, stats.food - 15); infect = 0; chill = 0;
+      toast('Вы выспались. Наступило утро.');
+    });
+  }
+  function computeHomeAction() {
+    curAct = null; let best = 1e9;
+    if (!busy) {
+      const cand = (d, label, fn) => { if (d < best) { best = d; curAct = { label, fn }; } };
+      const dc = r => Math.hypot(p.x - (r.x1 + r.x2) / 2, p.y - (r.y1 + r.y2) / 2);
+      if (dc(FURN.bed) < 105) cand(dc(FURN.bed), 'Спать', sleep);
+      if (dc(FURN.stove) < 85) cand(dc(FURN.stove), 'Печь', openFurnace);
+      if (dc(FURN.chest) < 70) cand(dc(FURN.chest), 'Сундук', openChest);
+      const dch = Math.hypot(p.x + 15, p.y - 68);
+      if (dch < 52) cand(dch, 'Присесть', rest);
+      if (p.y > 126 && Math.abs(p.x) < 55) cand(0, 'Выйти', leaveHome);
+    }
+    document.body.classList.toggle('hasAct', !!curAct);
+    if (curAct) $('actBtn').textContent = curAct.label;
+  }
+  function updateHome(dt) {
+    const { vx, vy, len } = readInput();
+    moving = len > .08;
+    if (moving) { p.aim = Math.atan2(vy, vx); if (Math.abs(vx) > .1) face = vx > 0 ? 1 : -1; }
+    const sp = 150 * spd() * (infect > 0 ? .8 : 1) * (chill > 0 ? .65 : 1);
+    if (moving) {
+      const nx = p.x + vx * sp * dt, ny = p.y + vy * sp * dt;
+      if (!roomBlocked(nx, p.y)) p.x = nx;
+      if (!roomBlocked(p.x, ny)) p.y = ny;
+    }
+    p.inv -= dt;
+    computeHomeAction();
+    updateFloats(dt);
+    stats.o2 = O2MAX;
+    cam.x = 0; cam.y = 0;
+  }
+  function skyColor() {
+    const nl = nightLevel();
+    let c = [143, 208, 255];
+    if (dayT >= .55 && dayT < .65) c = [240, 160, 96];
+    if (dayT >= .9) c = [245, 192, 136];
+    const nt = [16, 26, 58];
+    c = c.map((v, i) => v + (nt[i] - v) * nl);
+    if (weather === 'rain') c = c.map((v, i) => v * .6 + [90, 110, 135][i] * .4);
+    if (weather === 'snow') c = c.map(v => v * .75 + 255 * .25);
+    return 'rgb(' + c.map(v => Math.round(v)).join(',') + ')';
+  }
+  function drawWindow(cx, cy, t) {
+    ctx.fillStyle = '#4a2f18'; ctx.fillRect(cx - 32, cy - 26, 64, 52);
+    ctx.fillStyle = skyColor(); ctx.fillRect(cx - 27, cy - 21, 54, 42);
+    if (nightLevel() > .5 && weather === 'clear') {
+      ctx.fillStyle = 'rgba(255,255,230,.9)';
+      for (let k = 0; k < 5; k++) ctx.fillRect(cx - 24 + ((k * 23) % 48), cy - 18 + ((k * 13) % 34), 2, 2);
+      ctx.beginPath(); ctx.arc(cx + 14, cy - 10, 5, 0, 7); ctx.fill();
+    }
+    if (weather === 'rain') {
+      ctx.strokeStyle = 'rgba(210,225,255,.7)'; ctx.lineWidth = 1; ctx.beginPath();
+      for (let k = 0; k < 7; k++) { const x = cx - 24 + k * 8, y = cy - 20 + ((t * 40 + k * 9) % 38); ctx.moveTo(x, y); ctx.lineTo(x - 2, y + 6); }
+      ctx.stroke();
+    } else if (weather === 'snow') {
+      ctx.fillStyle = '#fff';
+      for (let k = 0; k < 8; k++) { const x = cx - 24 + ((k * 17) % 48) + Math.sin(t + k) * 2, y = cy - 20 + ((t * 14 + k * 11) % 40); ctx.beginPath(); ctx.arc(x, y, 1.4, 0, 7); ctx.fill(); }
+    }
+    ctx.strokeStyle = '#4a2f18'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(cx, cy - 21); ctx.lineTo(cx, cy + 21); ctx.moveTo(cx - 27, cy); ctx.lineTo(cx + 27, cy); ctx.stroke();
+    ctx.fillStyle = '#b03a3a';
+    ctx.beginPath(); ctx.moveTo(cx - 34, cy - 26); ctx.lineTo(cx - 20, cy - 26); ctx.lineTo(cx - 28, cy + 8); ctx.lineTo(cx - 34, cy + 8); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(cx + 34, cy - 26); ctx.lineTo(cx + 20, cy - 26); ctx.lineTo(cx + 28, cy + 8); ctx.lineTo(cx + 34, cy + 8); ctx.closePath(); ctx.fill();
+  }
+  function drawBedH() {
+    const r = FURN.bed, w = r.x2 - r.x1;
+    ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(r.x1 + 4, r.y2 - 2, w, 8);
+    ctx.fillStyle = '#6e4524'; ctx.fillRect(r.x1, r.y1 - 22, w, r.y2 - r.y1 + 22);
+    ctx.fillStyle = '#e9e1d0'; ctx.fillRect(r.x1 + 6, r.y1 - 14, w - 12, 34);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(r.x1 + 10, r.y1 - 11, 36, 24);
+    ctx.fillStyle = '#3e6fb0'; ctx.fillRect(r.x1 + 6, r.y1 + 18, w - 12, r.y2 - r.y1 - 22);
+    ctx.fillStyle = 'rgba(255,255,255,.2)';
+    for (let k = 0; k < 4; k++) ctx.fillRect(r.x1 + 12, r.y1 + 26 + k * 10, w - 24, 3);
+  }
+  function drawStoveH(t) {
+    const r = FURN.stove, w = r.x2 - r.x1, cx = (r.x1 + r.x2) / 2;
+    ctx.fillStyle = '#5a5d62'; ctx.fillRect(cx - 12, -176, 24, 56);
+    ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.fillRect(r.x1 + 3, r.y2 - 2, w, 8);
+    ctx.fillStyle = '#6d7075'; ctx.fillRect(r.x1, r.y1 - 30, w, r.y2 - r.y1 + 30);
+    ctx.fillStyle = '#868a90'; ctx.fillRect(r.x1 + 3, r.y1 - 27, w - 6, 9);
+    ctx.strokeStyle = 'rgba(0,0,0,.2)'; ctx.lineWidth = 1;
+    for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.moveTo(r.x1, r.y1 - 12 + k * 14); ctx.lineTo(r.x2, r.y1 - 12 + k * 14); ctx.stroke(); }
+    ctx.fillStyle = '#17110d'; ctx.fillRect(r.x1 + 12, r.y1 + 2, w - 24, 30);
+    const rd = furnaceReady(), active = furnace.out && rd < furnace.n, ready = furnace.out && rd > 0;
+    if (active || ready) {
+      const fl = Math.sin(t * 9) * 3;
+      ctx.fillStyle = 'rgba(255,140,50,' + (.22 + .06 * Math.sin(t * 7)) + ')'; ctx.beginPath(); ctx.arc(cx, r.y1 + 18, 56 + fl, 0, 7); ctx.fill();
+      ctx.fillStyle = '#ff7a1c';
+      ctx.beginPath(); ctx.moveTo(cx - 14, r.y1 + 32); ctx.quadraticCurveTo(cx - 12, r.y1 + 10 + fl, cx - 4, r.y1 + 32); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(cx - 6, r.y1 + 32); ctx.quadraticCurveTo(cx, r.y1 + 2 - fl, cx + 8, r.y1 + 32); ctx.fill();
+      ctx.fillStyle = '#ffd24a';
+      ctx.beginPath(); ctx.moveTo(cx - 3, r.y1 + 32); ctx.quadraticCurveTo(cx + 1, r.y1 + 14 + fl, cx + 5, r.y1 + 32); ctx.fill();
+    } else {
+      ctx.fillStyle = 'rgba(200,60,20,.5)'; ctx.fillRect(cx - 14, r.y1 + 28, 28, 4);
+    }
+    if (ready) { ctx.fillStyle = '#8dff8d'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('✓', cx, r.y1 - 36); }
+  }
+  function drawChestH() {
+    const r = FURN.chest, x = (r.x1 + r.x2) / 2, y = r.y2;
+    ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.beginPath(); ctx.ellipse(x + 3, y + 3, 26, 7, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#8a5a2b'; ctx.fillRect(x - 22, y - 22, 44, 22);
+    ctx.fillStyle = '#a8743b'; ctx.fillRect(x - 22, y - 34, 44, 14);
+    ctx.fillStyle = '#d9b04a'; ctx.fillRect(x - 4, y - 24, 8, 9);
+    ctx.strokeStyle = '#5a3a1e'; ctx.lineWidth = 2; ctx.strokeRect(x - 22, y - 34, 44, 34);
+  }
+  function drawTableH(t) {
+    const r = FURN.table, w = r.x2 - r.x1;
+    ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(r.x1 + 4, r.y2 - 2, w, 8);
+    ctx.fillStyle = '#6e4524'; ctx.fillRect(r.x1 + 6, r.y1 + 24, 8, r.y2 - r.y1 - 20); ctx.fillRect(r.x2 - 14, r.y1 + 24, 8, r.y2 - r.y1 - 20);
+    ctx.fillStyle = '#a8743b'; ctx.fillRect(r.x1, r.y1 + 6, w, 28);
+    ctx.fillStyle = '#c28b4e'; ctx.fillRect(r.x1 + 2, r.y1 + 8, w - 4, 8);
+    ctx.fillStyle = '#e8e0cc'; ctx.beginPath(); ctx.arc(r.x1 + 26, r.y1 + 20, 9, 0, 7); ctx.fill();
+    ctx.fillStyle = '#d9a35e'; ctx.beginPath(); ctx.ellipse(r.x1 + 26, r.y1 + 18, 6, 4, 0, 0, 7); ctx.fill();
+    const cx = r.x2 - 24, cy = r.y1 + 14;
+    ctx.fillStyle = '#f2ead0'; ctx.fillRect(cx - 4, cy - 2, 8, 14);
+    ctx.fillStyle = 'rgba(255,190,90,' + (.25 + .05 * Math.sin(t * 8)) + ')'; ctx.beginPath(); ctx.arc(cx, cy - 8, 22, 0, 7); ctx.fill();
+    ctx.fillStyle = '#ffb347'; ctx.beginPath(); ctx.ellipse(cx, cy - 6, 3, 6 + Math.sin(t * 9), 0, 0, 7); ctx.fill();
+  }
+  function drawChairH() {
+    const x = -15, y = 72;
+    ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.beginPath(); ctx.ellipse(x + 2, y + 4, 16, 5, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#6e4524'; ctx.fillRect(x - 14, y - 34, 28, 6);
+    ctx.fillStyle = '#a8743b'; ctx.fillRect(x - 14, y - 26, 28, 24);
+    ctx.fillStyle = '#c28b4e'; ctx.fillRect(x - 12, y - 24, 24, 5);
+  }
+  function drawHome(t) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#120d09'; ctx.fillRect(0, 0, cv.width, cv.height);
+    const Z = Math.min(W / 500, H / 380, 1.7);
+    ctx.setTransform(DPR * Z, 0, 0, DPR * Z, DPR * W / 2, DPR * (H / 2 - 5));
+    for (let i = 0; i < 13; i++) { ctx.fillStyle = i % 2 ? '#b98b55' : '#c39662'; ctx.fillRect(-240, -100 + i * 20, 480, 20); }
+    ctx.strokeStyle = 'rgba(80,50,20,.35)'; ctx.lineWidth = 1;
+    for (let i = 0; i <= 13; i++) { ctx.beginPath(); ctx.moveTo(-240, -100 + i * 20); ctx.lineTo(240, -100 + i * 20); ctx.stroke(); }
+    ctx.fillStyle = '#8a6a48'; ctx.fillRect(-240, -178, 480, 78);
+    ctx.fillStyle = 'rgba(0,0,0,.12)'; for (let i = 0; i < 12; i++) ctx.fillRect(-240 + i * 40, -178, 3, 78);
+    ctx.fillStyle = '#5a3d22'; ctx.fillRect(-240, -104, 480, 6);
+    ctx.fillStyle = '#6e5035'; ctx.fillRect(-252, -178, 12, 350); ctx.fillRect(240, -178, 12, 350);
+    ctx.fillStyle = '#5a3d22'; ctx.fillRect(-252, 160, 504, 12);
+    ctx.fillStyle = '#4a2f18'; ctx.fillRect(-34, 156, 68, 16);
+    ctx.fillStyle = '#7a4d24'; ctx.fillRect(-28, 158, 56, 14);
+    ctx.fillStyle = '#e8d08a'; ctx.beginPath(); ctx.arc(20, 166, 2, 0, 7); ctx.fill();
+    drawWindow(-110, -150, t); drawWindow(70, -150, t);
+    // shelf and pictures
+    ctx.fillStyle = '#5a3a1e'; ctx.fillRect(-60, -132, 90, 6);
+    const bk = ['#b03a3a', '#3e6fb0', '#d9b04a', '#4a8f5a', '#8a5fb0'];
+    for (let k = 0; k < 8; k++) { ctx.fillStyle = bk[k % 5]; ctx.fillRect(-56 + k * 9, -148 - (k % 3) * 2, 7, 16 + (k % 3) * 2); }
+    ctx.fillStyle = '#5a3a1e'; ctx.fillRect(-205, -165, 34, 26); ctx.fillRect(160, -165, 34, 26);
+    ctx.fillStyle = '#6fa6c8'; ctx.fillRect(-202, -162, 28, 20); ctx.fillStyle = '#6fa64f'; ctx.fillRect(-202, -150, 28, 8);
+    ctx.fillStyle = '#e8c870'; ctx.fillRect(163, -162, 28, 20); ctx.fillStyle = '#a63d3d'; ctx.beginPath(); ctx.arc(177, -152, 6, 0, 7); ctx.fill();
+    // rug
+    ctx.fillStyle = '#a63d3d'; ctx.beginPath(); ctx.ellipse(-15, 100, 90, 38, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#e8c870'; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(-15, 100, 74, 29, 0, 0, 7); ctx.stroke();
+    // plants
+    for (const [px, py] of [[-216, 138], [216, 138]]) {
+      ctx.fillStyle = '#7a4d24'; ctx.fillRect(px - 8, py - 6, 16, 14);
+      ctx.fillStyle = '#3f9a48';
+      for (let k = 0; k < 5; k++) { ctx.save(); ctx.translate(px, py - 6); ctx.rotate(-1 + k * .5 + Math.sin(t + k) * .03); ctx.beginPath(); ctx.ellipse(0, -9, 3, 10, 0, 0, 7); ctx.fill(); ctx.restore(); }
+    }
+    const list = [
+      { y: FURN.bed.y2, f: drawBedH }, { y: FURN.stove.y2, f: () => drawStoveH(t) }, { y: FURN.table.y2, f: () => drawTableH(t) },
+      { y: 74, f: drawChairH }, { y: FURN.chest.y2, f: drawChestH }, { y: p.y, f: () => drawPlayer(t) }
+    ];
+    list.sort((a, b) => a.y - b.y);
+    for (const e of list) e.f();
+    drawFloats();
+    const g = ctx.createRadialGradient(0, 10, 90, 0, 10, 330);
+    g.addColorStop(0, 'rgba(255,190,110,.06)'); g.addColorStop(1, 'rgba(10,5,0,.5)');
+    ctx.fillStyle = g; ctx.fillRect(-260, -190, 520, 380);
+  }
+
+  // ---------- furnace ----------
+  const SMELT = [
+    ['copper', 'cuBar', 'Медная руда', 'Медный слиток'], ['iron', 'feBar', 'Железная руда', 'Железный слиток'],
+    ['silver', 'agBar', 'Серебряная руда', 'Серебряный слиток'], ['gold', 'auBar', 'Золотая руда', 'Золотой слиток']
+  ];
+  const SMELT_MS = 3500;
+  let furnace = { out: null, n: 0, start: 0 };
+  function furnaceReady() { return furnace.out ? Math.min(furnace.n, Math.floor((Date.now() - furnace.start) / SMELT_MS)) : 0; }
+  function fuelPlan(n) {
+    const coalUse = Math.min(inv.coal, Math.ceil(n / 3)), rest = Math.max(0, n - coalUse * 3);
+    return rest <= inv.stick ? { coal: coalUse, stick: rest } : null;
+  }
+  function startSmelt(i, all) {
+    if (furnace.out) { toast('Сначала заберите готовые слитки.'); return; }
+    const [ore, bar] = SMELT[i];
+    let n = all ? Math.min(inv[ore], 10) : Math.min(inv[ore], 1);
+    if (n < 1) return;
+    let plan = fuelPlan(n);
+    while (!plan && n > 1) { n--; plan = fuelPlan(n); }
+    if (!plan) { toast('Нужно топливо: уголь или палки.'); return; }
+    inv[ore] -= n; inv.coal -= plan.coal; inv.stick -= plan.stick;
+    furnace = { out: bar, n, start: Date.now() };
+    updateHud(); renderFurnace();
+    toast('Плавка началась: ' + n + ' шт.');
+  }
+  function collectFurnace() {
+    const r = furnaceReady();
+    if (r < 1) return;
+    inv[furnace.out] += r; furnace.n -= r; furnace.start += r * SMELT_MS;
+    if (furnace.n <= 0) furnace = { out: null, n: 0, start: 0 };
+    gainXp(r * 2);
+    updateHud(); renderFurnace();
+  }
+  function renderFurnace() {
+    let h = '';
+    if (furnace.out) {
+      const nm = SMELT.find(x => x[1] === furnace.out)[3], r = furnaceReady();
+      const left = Math.ceil((SMELT_MS - ((Date.now() - furnace.start) % SMELT_MS)) / 1000);
+      h += `<p>В печи: <b>${nm}</b>. Готово ${r} из ${furnace.n}${r < furnace.n ? ' · следующий через ' + left + ' с' : ''}</p>`;
+      h += `<button data-f="collect" ${r > 0 ? '' : 'disabled'}>Забрать (${r})</button>`;
+    } else h += '<p>Печь свободна. Слиток плавится ' + (SMELT_MS / 1000) + ' с. Камень плавить не нужно.</p>';
+    h += `<div class="dneed">Топливо: уголь ${inv.coal} (на 3 слитка), палки ${inv.stick} (на 1)</div>`;
+    let any = false;
+    SMELT.forEach(([ore, bar, on, bn], i) => {
+      if (!inv[ore] && !inv[bar]) return;
+      any = true;
+      const can = inv[ore] > 0 && !furnace.out;
+      h += `<div class="crow"><span><b>${on}</b> ${inv[ore]}<br><small>→ ${bn}: ${inv[bar]}</small></span><span><button data-s1="${i}" ${can ? '' : 'disabled'}>×1</button><button data-sa="${i}" ${can ? '' : 'disabled'}>Все</button></span></div>`;
+    });
+    if (!any) h += '<p>Принесите руду из шахты.</p>';
+    $('furnaceRows').innerHTML = h;
+  }
+  function openFurnace() { renderFurnace(); $('furnaceUI').hidden = false; }
+  $('furnaceRows').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || b.disabled) return;
+    if (b.dataset.f === 'collect') collectFurnace();
+    else if (b.dataset.s1 != null) startSmelt(+b.dataset.s1, false);
+    else if (b.dataset.sa != null) startSmelt(+b.dataset.sa, true);
+  });
+  $('furnaceClose').addEventListener('click', () => { $('furnaceUI').hidden = true; });
+
+  // ---------- bag ----------
+  const BAG = [
+    ['Ресурсы', [['stick', '🪵', 'Палки'], ['stone', '🪨', 'Камни'], ['coal', '⚫', 'Уголь']]],
+    ['Руды', [['copper', '🟠', 'Медная руда'], ['iron', '⚙️', 'Железная руда'], ['silver', '⚪', 'Серебряная руда'], ['gold', '🟡', 'Золотая руда']]],
+    ['Слитки', [['cuBar', '🟧', 'Медные слитки'], ['feBar', '⬛', 'Железные слитки'], ['agBar', '⬜', 'Серебряные слитки'], ['auBar', '🟨', 'Золотые слитки']]],
+    ['Еда', [['fish', '🐟', 'Рыба'], ['meat', '🥩', 'Мясо'], ['veg', '🥕', 'Овощи'], ['seed', '🌱', 'Семена']]]
+  ];
+  function renderBag() {
+    let h = '';
+    for (const [title, items] of BAG) {
+      const rows = items.filter(x => inv[x[0]] > 0);
+      if (!rows.length) continue;
+      h += `<h3 style="margin:10px 0 4px">${title}</h3>`;
+      for (const [k, em, nm] of rows) h += `<div class="crow"><span>${em} ${nm}</span><b>${inv[k]}</b></div>`;
+    }
+    const eq = ['нет', 'Бронзовая', 'Серебряная', 'Антимагическая'][equip];
+    h += '<h3 style="margin:10px 0 4px">Снаряжение</h3>';
+    h += `<div class="crow"><span>Копьё</span><b>${inv.spear ? NAMES[inv.spear] : 'нет'}</b></div>`;
+    h += `<div class="crow"><span>Кирка</span><b>${inv.pick ? NAMES[inv.pick] : 'нет'}</b></div>`;
+    h += `<div class="crow"><span>Мотыга</span><b>${inv.hoe ? 'есть' : 'нет'}</b></div>`;
+    h += `<div class="crow"><span>Судно</span><b>${inv.ship ? 'Железный корабль' : inv.boat ? 'Лодка' : 'нет'}</b></div>`;
+    h += `<div class="crow"><span>Броня</span><b>${eq}</b></div>`;
+    $('bagRows').innerHTML = h;
+  }
+  $('bagBtn').addEventListener('click', () => { renderBag(); $('bagUI').hidden = false; });
+  $('bagClose').addEventListener('click', () => { $('bagUI').hidden = true; });
+
+  // ---------- survival ----------
+  function updateSurvival(dt, t) {
+    stats.food = Math.max(0, stats.food - dt * HUNGER * ((weather === 'snow' && !perks.warm && (scene === 'island' || scene === 'sea')) ? 1.3 : 1));
+    if (infect > 0) { infect -= dt; if (stats.hp > 8) stats.hp -= 1.6 * dt; }
+    if (chill > 0) chill -= dt;
+    if (stats.food <= 0) stats.hp -= 2 * dt;
+    else if (stats.food > 50 && stats.hp < maxHp() && stats.o2 > 0) stats.hp = Math.min(maxHp(), stats.hp + dt * 1.2);
+    if (stats.food < 20 && t - lastFoodHint > 25) {
+      lastFoodHint = t;
+      toast(inv.fish + inv.meat > 0 ? 'Вы голодны. Поешьте.' : 'Вы голодны. Добудьте еду.');
+    }
+    if (stats.hp <= 0) faint();
+  }
+
+  // ---------- drawing: shared ----------
+  function applyCamera() {
+    const Z = Math.max(.8, Math.min(W, H) / 440);
+    ctx.setTransform(DPR * Z, 0, 0, DPR * Z, DPR * (W / 2 - cam.x * Z), DPR * (H / 2 - cam.y * Z));
+    return Z;
+  }
+  function drawWaves(t, Z, skip) {
+    const hw = W / Z / 2 + 120, hh = H / Z / 2 + 120, gs = 110;
+    ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+    const x0 = Math.floor((cam.x - hw) / gs) * gs, y0 = Math.floor((cam.y - hh) / gs) * gs;
+    for (let gx = x0; gx < cam.x + hw; gx += gs) {
+      for (let gy = y0; gy < cam.y + hh; gy += gs) {
+        const x = gx + Math.sin(gx * .7 + gy * 1.3) * 30 + Math.sin(t * .9 + gy) * 8;
+        const y = gy + Math.cos(gx * 1.1 + gy * .5) * 30;
+        if (skip(x, y)) continue;
+        ctx.beginPath(); ctx.moveTo(x - 16, y);
+        ctx.quadraticCurveTo(x - 8, y - 6, x, y); ctx.quadraticCurveTo(x + 8, y + 6, x + 16, y); ctx.stroke();
+      }
+    }
+  }
+  function drawTerrain(I, t) {
+    const th = I.theme || { sh: '#2a9aa3', mid: '#52bdb6', sand: '#ecd9a0', grass: '#6fa64f', patch: 'rgba(52,110,40,.28)' };
+    path(I.shallowP); ctx.fillStyle = th.sh; ctx.fill();
+    path(I.midP); ctx.fillStyle = th.mid; ctx.fill();
+    path(I.sandP); ctx.fillStyle = th.sand; ctx.fill();
+    ctx.lineWidth = 4 + Math.sin(t * 1.5) * 1.5; ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.stroke();
+    path(I.grassP); ctx.fillStyle = th.grass; ctx.fill();
+    ctx.fillStyle = th.patch;
+    for (const g of I.patches) { ctx.beginPath(); ctx.arc(g.x, g.y, g.r, 0, 7); ctx.fill(); }
+  }
+  function drawFloats() {
+    ctx.font = 'bold 18px -apple-system, sans-serif'; ctx.textAlign = 'center';
+    for (const f of floats) {
+      ctx.globalAlpha = Math.max(0, Math.min(1, f.life));
+      ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.strokeText(f.txt, f.x, f.y);
+      ctx.fillStyle = '#fff'; ctx.fillText(f.txt, f.x, f.y);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ---------- drawing: island ----------
+  function drawTree(tr, t) {
+    if (tr.dead) { drawDeadTree(tr, t); return; }
+    if (tr.crystal) { drawCrystalTree(tr, t); return; }
+    ctx.fillStyle = 'rgba(0,0,0,.18)';
+    ctx.beginPath(); ctx.ellipse(tr.x + 10, tr.y + 4, 26, 9, 0, 0, 7); ctx.fill();
+    const sw = Math.sin(t * 1.2 + tr.ph) * 3;
+    const tx = tr.x + tr.lean + sw, ty = tr.y - tr.h;
+    ctx.strokeStyle = '#7a5230'; ctx.lineWidth = 9; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(tr.x, tr.y);
+    ctx.quadraticCurveTo(tr.x + tr.lean * 1.3, tr.y - tr.h * .5, tx, ty); ctx.stroke();
+    for (let i = 0; i < 7; i++) {
+      ctx.save(); ctx.translate(tx, ty); ctx.rotate(i / 7 * Math.PI * 2 + tr.ph + sw * .01);
+      ctx.fillStyle = i % 2 ? '#2f7d3a' : '#43a04c';
+      ctx.beginPath(); ctx.ellipse(24, 0, 27, 8, 0, 0, 7); ctx.fill();
+      ctx.restore();
+    }
+    ctx.fillStyle = '#5b3a1e'; ctx.beginPath(); ctx.arc(tx, ty, 5, 0, 7); ctx.fill();
+  }
+
+  function drawPlayer(t) {
+    const bob = moving ? Math.sin(t * 12) * 2 : 0;
+    const x = p.x, y = p.y, s = face;
+    const inWater = Math.hypot(x, y) > isl.radiusAt(x, y);
+    const blink = p.inv > 0 && Math.floor(t * 20) % 2;
+    ctx.fillStyle = 'rgba(0,0,0,.2)';
+    ctx.beginPath(); ctx.ellipse(x, y + 2, 13, 5, 0, 0, 7); ctx.fill();
+
+    if (inv.spear && p.atk <= 0) {
+      const hx = x + s * 16, hy = y - 14 + bob;
+      ctx.strokeStyle = '#8a5a2b'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(hx, hy + 22); ctx.lineTo(hx, hy - 34); ctx.stroke();
+      ctx.fillStyle = TIER_COL[inv.spear];
+      ctx.beginPath(); ctx.moveTo(hx, hy - 48); ctx.lineTo(hx - 4, hy - 33); ctx.lineTo(hx + 4, hy - 33); ctx.closePath(); ctx.fill();
+    }
+    ctx.strokeStyle = '#8b6a48'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    const leg = moving ? Math.sin(t * 12) * 4 : 0;
+    ctx.beginPath(); ctx.moveTo(x - 4, y - 8); ctx.lineTo(x - 4 + leg, y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + 4, y - 8); ctx.lineTo(x + 4 - leg, y); ctx.stroke();
+    ctx.fillStyle = blink ? '#ff9a9a' : armorCol();
+    ctx.beginPath(); ctx.ellipse(x, y - 17 + bob, 10, 13, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#e2a97c';
+    ctx.beginPath(); ctx.arc(x, y - 35 + bob, 9, 0, 7); ctx.fill();
+    ctx.fillStyle = '#3a2a1a';
+    ctx.beginPath(); ctx.arc(x, y - 37 + bob, 9, Math.PI, 0); ctx.fill();
+    if (equip) { ctx.fillStyle = armorCol(); ctx.beginPath(); ctx.arc(x, y - 38 + bob, 9.5, Math.PI * 1.02, Math.PI * 1.98); ctx.fill(); }
+    ctx.beginPath(); ctx.arc(x, y - 34 + bob, 1.6, 0, 7); ctx.arc(x + s * 4, y - 34 + bob, 1.6, 0, 7); ctx.fill();
+
+    if (p.atk > 0 && inv.spear) {
+      const ext = Math.sin((1 - p.atk / .25) * Math.PI);
+      ctx.save(); ctx.translate(x, y - 16); ctx.rotate(p.aim);
+      ctx.strokeStyle = '#8a5a2b'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(4, 0); ctx.lineTo(30 + ext * 44, 0); ctx.stroke();
+      ctx.fillStyle = TIER_COL[inv.spear];
+      ctx.beginPath(); ctx.moveTo(46 + ext * 44, 0); ctx.lineTo(28 + ext * 44, -4.5); ctx.lineTo(28 + ext * 44, 4.5); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+
+    if (inWater) {
+      const k = (t * 1.5) % 1;
+      ctx.fillStyle = 'rgba(77,184,180,.6)';
+      ctx.beginPath(); ctx.ellipse(x, y - 1, 15, 7, 0, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,' + (0.6 - k * .5) + ')'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(x, y, 14 + k * 16, 6 + k * 7, 0, 0, 7); ctx.stroke();
+    }
+  }
+
+  function drawNpc(n, t) {
+    const x = n.x, y = n.y, bob = Math.sin(t * 2) * 1.2;
+    ctx.fillStyle = 'rgba(0,0,0,.2)';
+    ctx.beginPath(); ctx.ellipse(x, y + 2, 13, 5, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#6d5238'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x - 4, y - 8); ctx.lineTo(x - 4, y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + 4, y - 8); ctx.lineTo(x + 4, y); ctx.stroke();
+    ctx.fillStyle = n.col;
+    ctx.beginPath(); ctx.ellipse(x, y - 17 + bob, 11, 13, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#e2a97c';
+    ctx.beginPath(); ctx.arc(x, y - 35 + bob, 9, 0, 7); ctx.fill();
+    ctx.fillStyle = n.hat;
+    ctx.beginPath(); ctx.ellipse(x, y - 40 + bob, 13, 4.5, 0, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y - 41 + bob, 7, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = '#222';
+    ctx.beginPath(); ctx.arc(x - 3, y - 34 + bob, 1.5, 0, 7); ctx.arc(x + 3, y - 34 + bob, 1.5, 0, 7); ctx.fill();
+    const q = n.quests[n.stage];
+    if (q) {
+      ctx.font = 'bold 24px -apple-system, sans-serif'; ctx.textAlign = 'center';
+      const yy = y - 62 + Math.sin(t * 3) * 3;
+      ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.strokeText(canTurn(q) ? '✓' : '!', x, yy);
+      ctx.fillStyle = canTurn(q) ? '#8dff8d' : '#ffd447'; ctx.fillText(canTurn(q) ? '✓' : '!', x, yy);
+    }
+  }
+
+  function drawAnimal(a, t) {
+    if (a.night && isBoss(a)) drawNightAura(a, t);
+    if (a.type === 'skeleton' || a.type === 'archer' || a.type === 'boss') { drawSkel(a, t); return; }
+    if (a.type === 'mage' || a.type === 'archmage') { drawMage(a, t); return; }
+    if (a.type === 'golem') { drawGolem(a, t); return; }
+    if (a.type === 'zombie' || a.type === 'runner' || a.type === 'rotlord') { drawZombie(a, t); return; }
+    if (a.type === 'ghost' || a.type === 'wraith' || a.type === 'queen') { drawGhost(a, t); return; }
+    ctx.save(); ctx.translate(a.x, a.y);
+    ctx.fillStyle = 'rgba(0,0,0,.2)';
+    ctx.beginPath(); ctx.ellipse(0, 3, a.r * 1.3, a.r * .5, 0, 0, 7); ctx.fill();
+    const dir = Math.cos(a.ang) >= 0 ? 1 : -1;
+    ctx.scale(dir, 1);
+    const hit = a.hitT > 0;
+    const step = Math.sin(t * 12 + a.ph) * (a.chasing ? 3 : 1.5);
+    if (a.type === 'boar') {
+      const r = a.r;
+      ctx.strokeStyle = '#3d2818'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(-r * .6, -r * .3); ctx.lineTo(-r * .6 + step, 0); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-r * .1, -r * .3); ctx.lineTo(-r * .1 - step, 0); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(r * .5, -r * .3); ctx.lineTo(r * .5 + step, 0); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(r * .9, -r * .3); ctx.lineTo(r * .9 - step, 0); ctx.stroke();
+      ctx.fillStyle = hit ? '#ffffff' : '#7a5136';
+      ctx.beginPath(); ctx.ellipse(0, -r * .85, r * 1.15, r * .8, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = hit ? '#ffffff' : '#65432b';
+      ctx.beginPath(); ctx.ellipse(r * 1.05, -r * .75, r * .6, r * .5, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = '#f2ead8';
+      ctx.beginPath(); ctx.moveTo(r * 1.3, -r * .5); ctx.lineTo(r * 1.6, -r * .75); ctx.lineTo(r * 1.15, -r * .6); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#3d2818';
+      ctx.beginPath(); ctx.moveTo(-r * .2, -r * 1.6); ctx.lineTo(r * .1, -r * 1.75); ctx.lineTo(r * .3, -r * 1.5); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = a.chasing ? '#ff4a3a' : '#111';
+      ctx.beginPath(); ctx.arc(r * 1.05, -r * .95, 2, 0, 7); ctx.fill();
+    } else {
+      const r = a.r;
+      ctx.strokeStyle = '#a53a2a'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+      for (let k = -1; k <= 1; k++) {
+        ctx.beginPath(); ctx.moveTo(k * r * .5, -r * .3); ctx.lineTo(k * r * .8 + step * k, 0); ctx.stroke();
+      }
+      ctx.fillStyle = hit ? '#ffffff' : '#d8503a';
+      ctx.beginPath(); ctx.ellipse(0, -r * .6, r, r * .65, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = hit ? '#ffffff' : '#e8654d';
+      ctx.beginPath(); ctx.arc(-r * 1.1, -r * 1.2 + (a.chasing ? step : 0), r * .45, 0, 7); ctx.arc(r * 1.1, -r * 1.2 - (a.chasing ? step : 0), r * .45, 0, 7); ctx.fill();
+      ctx.fillStyle = '#111';
+      ctx.beginPath(); ctx.arc(-r * .3, -r * 1.05, 1.8, 0, 7); ctx.arc(r * .3, -r * 1.05, 1.8, 0, 7); ctx.fill();
+    }
+    ctx.restore();
+    if (a.hp < a.maxhp) {
+      ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(a.x - 14, a.y - a.r * 2.3 - 8, 28, 4);
+      ctx.fillStyle = '#e0533f'; ctx.fillRect(a.x - 14, a.y - a.r * 2.3 - 8, 28 * Math.max(0, a.hp) / a.maxhp, 4);
+    }
+  }
+
+  function drawItem(it, t) {
+    const pulse = .5 + .5 * Math.sin(t * 3 + it.rot * 5);
+    ctx.fillStyle = 'rgba(255,255,255,' + (.14 + .14 * pulse) + ')';
+    ctx.beginPath(); ctx.arc(it.x, it.y, 15 + pulse * 3, 0, 7); ctx.fill();
+    if (it.type === 'stick') {
+      ctx.save(); ctx.translate(it.x, it.y); ctx.rotate(it.rot);
+      ctx.strokeStyle = '#7a4d24'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(-11, 0); ctx.lineTo(11, 0); ctx.stroke();
+      ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(-2, 0); ctx.lineTo(3, -7); ctx.stroke();
+      ctx.restore();
+    } else if (it.type === 'gold') {
+      ctx.fillStyle = '#f2cf4a';
+      ctx.beginPath(); ctx.arc(it.x, it.y, 8, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.6)';
+      ctx.beginPath(); ctx.arc(it.x - 2.5, it.y - 2.5, 2.5, 0, 7); ctx.fill();
+    } else {
+      ctx.fillStyle = '#8d9296';
+      ctx.beginPath(); ctx.ellipse(it.x, it.y, 10, 7, it.rot, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.38)';
+      ctx.beginPath(); ctx.ellipse(it.x - 3, it.y - 2, 4, 2.5, it.rot, 0, 7); ctx.fill();
+    }
+  }
+
+  function drawIsland(t) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#0d5566'; ctx.fillRect(0, 0, cv.width, cv.height);
+    const Z = applyCamera();
+    drawWaves(t, Z, (x, y) => Math.hypot(x, y) < isl.radiusAt(x, y) + 115);
+    drawTerrain(isl, t);
+    drawFarm(t);
+    drawZones(t);
+    for (const it of isl.items) drawItem(it, t);
+
+    const list = isl.trees.map(tr => ({ y: tr.y, f: () => drawTree(tr, t) }));
+    for (const a of isl.animals) list.push({ y: a.y, f: () => drawAnimal(a, t) });
+    if (isl.npc) list.push({ y: isl.npc.y, f: () => drawNpc(isl.npc, t) });
+    if (isl.id === 0 && inv.house) list.push({ y: HY, f: drawHouse });
+    list.push({ y: p.y, f: () => drawPlayer(t) });
+    list.sort((a, b) => a.y - b.y);
+    for (const e of list) e.f();
+    drawArrows();
+    drawFloats();
+    if (isl.dark) drawDarkness(Z);
+    drawEnv(t, Z, p.x, p.y - 16, isl.dark);
+    drawBossBar();
+  }
+
+  // ---------- drawing: sea ----------
+  function drawBoat(t) {
+    ctx.save(); ctx.translate(boat.x, boat.y); ctx.rotate(boat.ang);
+    const sp = Math.hypot(boat.vx, boat.vy);
+    if (sp > 15) {
+      ctx.strokeStyle = 'rgba(255,255,255,' + Math.min(.45, sp / 400) + ')'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+      for (const s of [-1, 1]) {
+        ctx.beginPath(); ctx.moveTo(-30, s * 10); ctx.lineTo(-30 - sp * .35, s * (14 + sp * .05)); ctx.stroke();
+      }
+    }
+    ctx.fillStyle = 'rgba(0,0,0,.2)';
+    ctx.beginPath(); ctx.ellipse(4, 7, 38, 15, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#7a4d24';
+    ctx.beginPath(); ctx.moveTo(40, 0); ctx.quadraticCurveTo(26, -18, -26, -16); ctx.lineTo(-33, -9); ctx.lineTo(-33, 9); ctx.lineTo(-26, 16); ctx.quadraticCurveTo(26, 18, 40, 0); ctx.fill();
+    ctx.fillStyle = '#b98650';
+    ctx.beginPath(); ctx.ellipse(-2, 0, 27, 10, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#7a4d24'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(-6, -9); ctx.lineTo(-6, 9); ctx.moveTo(10, -8); ctx.lineTo(10, 8); ctx.stroke();
+    const row = Math.sin(t * 6) * Math.min(1, sp / 120) * .5;
+    ctx.strokeStyle = '#8a5a2b'; ctx.lineWidth = 3;
+    for (const s of [-1, 1]) {
+      ctx.beginPath(); ctx.moveTo(-2, s * 8); ctx.lineTo(-10 - row * 12 * s, s * 26); ctx.stroke();
+    }
+    ctx.fillStyle = '#e2a97c';
+    ctx.beginPath(); ctx.arc(-4, 0, 6.5, 0, 7); ctx.fill();
+    ctx.fillStyle = '#3a2a1a';
+    ctx.beginPath(); ctx.arc(-5.5, 0, 6.5, Math.PI * .5, Math.PI * 1.5); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawSea(t) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#0d5566'; ctx.fillRect(0, 0, cv.width, cv.height);
+    const Z = applyCamera();
+    drawWaves(t, Z, (x, y) => islands.some(I => {
+      const dx = x - I.cx, dy = y - I.cy;
+      return Math.hypot(dx, dy) < I.radiusAt(dx, dy) + 115;
+    }));
+    const view = Math.max(W, H) / Z;
+    for (const I of islands) {
+      if (Math.hypot(cam.x - I.cx, cam.y - I.cy) > I.maxR + view) continue;
+      ctx.save(); ctx.translate(I.cx, I.cy);
+      drawTerrain(I, t);
+      for (const tr of I.trees) drawTree(tr, t);
+      ctx.restore();
+      if (I.discovered && Math.hypot(boat.x - I.cx, boat.y - I.cy) < I.maxR + 700) {
+        ctx.font = 'bold 22px -apple-system, sans-serif'; ctx.textAlign = 'center';
+        ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,.5)';
+        const lab = I.name + (I.minLevel > 1 ? '  (ур. ' + I.minLevel + '+)' : '');
+        ctx.strokeText(lab, I.cx, I.cy - I.maxR + 110);
+        ctx.fillStyle = hero.level < I.minLevel ? '#ffb0a0' : '#fff'; ctx.fillText(lab, I.cx, I.cy - I.maxR + 110);
+      }
+    }
+    for (const m of seaMobs) drawSeaMob(m, t);
+    if (inv.ship) drawShip(t); else drawBoat(t);
+    drawBoatSpear();
+    drawBalls();
+    drawFloats();
+    drawEnv(t, Z, boat.x, boat.y, false);
+
+    // arrows to discovered islands
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const sx = (W / 2 + (boat.x - cam.x) * Z) * DPR, sy = (H / 2 + (boat.y - cam.y) * Z) * DPR;
+    for (const m of seaMobs) {
+      const dx = m.x - boat.x, dy = m.y - boat.y, d = Math.hypot(dx, dy);
+      if (d > 800 || d < 260) continue;
+      const a = Math.atan2(dy, dx), r0 = 74 * DPR;
+      ctx.save(); ctx.translate(sx + Math.cos(a) * r0, sy + Math.sin(a) * r0); ctx.rotate(a);
+      ctx.fillStyle = 'rgba(255,70,55,.9)';
+      ctx.beginPath(); ctx.moveTo(9 * DPR, 0); ctx.lineTo(-6 * DPR, -6 * DPR); ctx.lineTo(-6 * DPR, 6 * DPR); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    for (const I of islands) {
+      if (!I.discovered) continue;
+      const dx = I.cx - boat.x, dy = I.cy - boat.y, d = Math.hypot(dx, dy);
+      if (d < I.maxR + 500) continue;
+      const a = Math.atan2(dy, dx), r0 = 92 * DPR;
+      ctx.save(); ctx.translate(sx + Math.cos(a) * r0, sy + Math.sin(a) * r0); ctx.rotate(a);
+      ctx.fillStyle = I.id === 0 ? 'rgba(243,234,210,.9)' : 'rgba(255,211,106,.9)';
+      ctx.beginPath(); ctx.moveTo(11 * DPR, 0); ctx.lineTo(-7 * DPR, -8 * DPR); ctx.lineTo(-7 * DPR, 8 * DPR); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // ---------- drawing: dive ----------
+  function drawCreature(c, t) {
+    ctx.save(); ctx.translate(c.x, c.y);
+    if (c.type === 'jelly') {
+      const pul = 1 + .08 * Math.sin(t * 4 + c.ph);
+      ctx.strokeStyle = 'rgba(255,170,210,.65)'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+      for (let j = 0; j < 7; j++) {
+        const a = j / 7 * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+        ctx.beginPath(); ctx.moveTo(ca * c.r * .5, sa * c.r * .5);
+        ctx.quadraticCurveTo(ca * c.r * 1.1 + Math.sin(t * 3 + j) * 5, sa * c.r * 1.1 + Math.cos(t * 3 + j) * 5, ca * c.r * 1.7, sa * c.r * 1.7);
+        ctx.stroke();
+      }
+      ctx.fillStyle = c.hitT > 0 ? 'rgba(255,255,255,.9)' : 'rgba(255,140,200,.6)';
+      ctx.beginPath(); ctx.arc(0, 0, c.r * pul, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.35)';
+      ctx.beginPath(); ctx.arc(-c.r * .25, -c.r * .25, c.r * .4, 0, 7); ctx.fill();
+    } else {
+      ctx.rotate(c.ang);
+      const big = c.type === 'big', L = c.r * 1.35, Wd = c.r * .6;
+      const sw = Math.sin(t * (c.fl > 0 ? 18 : 8) + c.ph) * .3;
+      ctx.save(); ctx.translate(-L * .9, 0); ctx.rotate(sw);
+      ctx.fillStyle = big ? '#5d7fa0' : '#e8742a';
+      ctx.beginPath(); ctx.moveTo(4, 0); ctx.lineTo(-c.r * .9, -c.r * .6); ctx.lineTo(-c.r * .9, c.r * .6); ctx.closePath(); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = c.hitT > 0 ? '#ffffff' : (big ? '#8fb0cf' : '#ff9a3c');
+      ctx.beginPath(); ctx.ellipse(0, 0, L, Wd, 0, 0, 7); ctx.fill();
+      if (big) {
+        ctx.fillStyle = 'rgba(255,255,255,.35)';
+        ctx.beginPath(); ctx.ellipse(0, Wd * .3, L * .75, Wd * .35, 0, 0, 7); ctx.fill();
+      }
+      ctx.fillStyle = '#1b1b1b';
+      ctx.beginPath(); ctx.arc(L * .55, -Wd * .35, c.r * .13 + 1, 0, 7); ctx.arc(L * .55, Wd * .35, c.r * .13 + 1, 0, 7); ctx.fill();
+    }
+    ctx.restore();
+    if (c.hp < c.maxhp) {
+      ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(c.x - 13, c.y - c.r - 16, 26, 4);
+      ctx.fillStyle = '#e0533f'; ctx.fillRect(c.x - 13, c.y - c.r - 16, 26 * Math.max(0, c.hp) / c.maxhp, 4);
+    }
+  }
+
+  function drawDiver(t) {
+    ctx.save(); ctx.translate(diver.x, diver.y); ctx.rotate(diver.aim);
+    const moving2 = Math.hypot(diver.vx, diver.vy) > 10;
+    const kick = Math.sin(t * 10) * (moving2 ? 1 : .3);
+    ctx.strokeStyle = '#8b6a48'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-10, -3); ctx.lineTo(-25, -3 + kick * 5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-10, 3); ctx.lineTo(-25, 3 - kick * 5); ctx.stroke();
+    const ext = diver.atk > 0 ? Math.sin((1 - diver.atk / .28) * Math.PI) : 0;
+    const tip = 34 + ext * 46;
+    ctx.strokeStyle = '#8a5a2b'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(-8 + ext * 30, 9); ctx.lineTo(tip, 9); ctx.stroke();
+    ctx.fillStyle = TIER_COL[Math.max(1, inv.spear)];
+    ctx.beginPath(); ctx.moveTo(tip + 12, 9); ctx.lineTo(tip - 2, 5); ctx.lineTo(tip - 2, 13); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = (diver.inv > 0 && Math.floor(t * 20) % 2) ? '#ff9a9a' : '#e8e0c8';
+    ctx.beginPath(); ctx.ellipse(0, 0, 14, 9, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#e2a97c'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(4, 4); ctx.lineTo(8 + ext * 22, 9); ctx.stroke();
+    ctx.fillStyle = '#e2a97c';
+    ctx.beginPath(); ctx.arc(13, 0, 7, 0, 7); ctx.fill();
+    ctx.fillStyle = '#3a2a1a';
+    ctx.beginPath(); ctx.arc(11.5, 0, 7, Math.PI * .5, Math.PI * 1.5); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawDive(t) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#04212c'; ctx.fillRect(0, 0, cv.width, cv.height);
+    applyCamera();
+
+    ctx.fillStyle = '#0c5a78';
+    ctx.beginPath(); ctx.arc(0, 0, ARENA + 40, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(120,195,195,.15)';
+    for (const s of deco.sand) { ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 7); ctx.fill(); }
+    ctx.fillStyle = 'rgba(255,255,255,.05)';
+    deco.sand.forEach((s, i) => {
+      ctx.beginPath();
+      ctx.arc(s.x + Math.sin(t * .5 + i) * 25, s.y + Math.cos(t * .4 + i * 2) * 25, s.r * .55, 0, 7);
+      ctx.fill();
+    });
+
+    for (const r of deco.rocks) {
+      ctx.fillStyle = '#3d6577';
+      ctx.beginPath(); ctx.ellipse(r.x, r.y, r.rx, r.ry, r.rot, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.14)';
+      ctx.beginPath(); ctx.ellipse(r.x - r.rx * .25, r.y - r.ry * .3, r.rx * .45, r.ry * .35, r.rot, 0, 7); ctx.fill();
+    }
+    for (const c of deco.corals) {
+      ctx.fillStyle = c.c;
+      for (let j = 0; j < c.n; j++) {
+        const a = j / c.n * Math.PI * 2;
+        ctx.beginPath(); ctx.arc(c.x + Math.cos(a) * 9, c.y + Math.sin(a) * 9, 6, 0, 7); ctx.fill();
+      }
+      ctx.beginPath(); ctx.arc(c.x, c.y, 7, 0, 7); ctx.fill();
+    }
+    for (const w of deco.weeds) {
+      for (let j = 0; j < 6; j++) {
+        ctx.save(); ctx.translate(w.x, w.y);
+        ctx.rotate(j / 6 * Math.PI * 2 + Math.sin(t * 1.3 + w.ph) * .15);
+        ctx.fillStyle = j % 2 ? '#2c8f5f' : '#37a56d';
+        ctx.beginPath(); ctx.ellipse(14 * w.s, 0, 16 * w.s, 4 * w.s, 0, 0, 7); ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    for (const c of creatures) drawCreature(c, t);
+    drawDiver(t);
+
+    ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1.5;
+    for (const b of bubbles) {
+      ctx.globalAlpha = Math.max(0, Math.min(1, b.life));
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    drawFloats();
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const cx = cv.width / 2, cy = cv.height / 2;
+    const g = ctx.createRadialGradient(cx, cy, Math.min(cv.width, cv.height) * .25, cx, cy, Math.max(cv.width, cv.height) * .78);
+    g.addColorStop(0, 'rgba(2,20,30,0)'); g.addColorStop(1, 'rgba(2,20,30,.68)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, cv.width, cv.height);
+    if (stats.o2 < 8) {
+      ctx.fillStyle = 'rgba(200,30,30,' + (.08 + .07 * Math.sin(t * 8)) + ')';
+      ctx.fillRect(0, 0, cv.width, cv.height);
+    }
+  }
+
+  // ---------- drawing: mine ----------
+  const TILE_COL = { 0: '#33261d', 1: '#7a5433', 2: '#7c858b', 3: '#7c858b', 4: '#7c858b', 5: '#22222b', 6: '#7c858b', 7: '#7c858b', 8: '#7c858b' };
+  const ORE_COL = { 3: '#d9843f', 4: '#d8b4a0', 6: '#f2cf4a', 7: '#1b1b20', 8: '#e6edf5' };
+  function drawTile(type, tx, ty) {
+    const x = tx * TS, y = ty * TS;
+    ctx.fillStyle = (type >= 2 && type !== 5) ? STONE_COL[curMine] : TILE_COL[type]; ctx.fillRect(x, y, TS + 1, TS + 1);
+    if (type === 0) {
+      ctx.fillStyle = 'rgba(0,0,0,.14)';
+      for (let k = 0; k < 3; k++) ctx.fillRect(x + hash(tx, ty, k) * (TS - 6), y + hash(tx, ty, k + 9) * (TS - 6), 5, 4);
+      return;
+    }
+    if (type === 1) {
+      for (let k = 0; k < 5; k++) {
+        ctx.fillStyle = k % 2 ? '#5f3f24' : '#8d6640';
+        ctx.fillRect(x + hash(tx, ty, k) * (TS - 8), y + hash(tx, ty, k + 5) * (TS - 8), 6, 5);
+      }
+    } else if (type === 5) {
+      ctx.strokeStyle = 'rgba(255,255,255,.06)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x + 6, y + 10); ctx.lineTo(x + TS - 10, y + TS - 6); ctx.stroke();
+    } else {
+      for (let k = 0; k < 3; k++) {
+        ctx.fillStyle = k % 2 ? 'rgba(0,0,0,.12)' : 'rgba(255,255,255,.1)';
+        ctx.fillRect(x + hash(tx, ty, k) * (TS - 14), y + hash(tx, ty, k + 3) * (TS - 14), 12, 9);
+      }
+      if (ORE_COL[type]) {
+        for (let k = 0; k < 4; k++) {
+          const ox = x + 8 + hash(tx, ty, k + 20) * (TS - 16), oy = y + 8 + hash(tx, ty, k + 30) * (TS - 16);
+          ctx.fillStyle = ORE_COL[type];
+          ctx.beginPath(); ctx.arc(ox, oy, 5 + hash(tx, ty, k + 40) * 3, 0, 7); ctx.fill();
+          ctx.fillStyle = 'rgba(255,255,255,.4)';
+          ctx.beginPath(); ctx.arc(ox - 1.5, oy - 1.5, 1.8, 0, 7); ctx.fill();
+        }
+      }
+    }
+    ctx.fillStyle = 'rgba(255,255,255,.07)'; ctx.fillRect(x, y, TS, 3);
+    ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(x, y + TS - 3, TS, 3);
+  }
+
+  function drawMiner(t) {
+    ctx.save(); ctx.translate(miner.x, miner.y); ctx.rotate(miner.aim);
+    const kick = miner.moving ? Math.sin(t * 10) : 0;
+    ctx.strokeStyle = '#6d5238'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-8, -4); ctx.lineTo(-15, -4 + kick * 4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-8, 4); ctx.lineTo(-15, 4 - kick * 4); ctx.stroke();
+    ctx.save(); ctx.translate(6, 9);
+    ctx.rotate(miner.mining ? Math.sin(t * 16) * .55 : 0);
+    ctx.strokeStyle = '#8a5a2b'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(-2, 0); ctx.lineTo(28, 0); ctx.stroke();
+    ctx.strokeStyle = TIER_COL[Math.max(1, inv.pick)]; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(26, -10); ctx.quadraticCurveTo(31, 0, 26, 10); ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = '#c9c39c';
+    ctx.beginPath(); ctx.ellipse(0, 0, 12, 9, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#e2a97c'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(3, 4); ctx.lineTo(8, 9); ctx.stroke();
+    ctx.fillStyle = '#e2b93b';
+    ctx.beginPath(); ctx.arc(9, 0, 8, 0, 7); ctx.fill();
+    ctx.fillStyle = '#fff8c0';
+    ctx.beginPath(); ctx.arc(15, 0, 2.6, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawMine(t) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, cv.width, cv.height);
+    const Z = applyCamera();
+    const hw = W / Z / 2 + TS, hh = H / Z / 2 + TS;
+    const tx0 = Math.max(0, Math.floor((cam.x - hw) / TS)), tx1 = Math.min(GW - 1, Math.floor((cam.x + hw) / TS));
+    const ty0 = Math.max(0, Math.floor((cam.y - hh) / TS)), ty1 = Math.min(GH - 1, Math.floor((cam.y + hh) / TS));
+    for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
+      if (!seen[ty * GW + tx]) continue;
+      drawTile(grid[ty * GW + tx], tx, ty);
+    }
+
+    const lx = LX * TS, ly = LY * TS;
+    ctx.fillStyle = '#5a3d22'; ctx.fillRect(lx + 10, ly + 2, 5, TS - 4); ctx.fillRect(lx + TS - 15, ly + 2, 5, TS - 4);
+    ctx.fillStyle = '#8a5a2b';
+    for (let k = 0; k < 4; k++) ctx.fillRect(lx + 10, ly + 6 + k * 10, TS - 20, 4);
+
+    if (mineTgt) {
+      const need = mineNeed(mineTgt.type);
+      const f = Math.min(1, mineProg / need);
+      const x = mineTgt.tx * TS, y = mineTgt.ty * TS;
+      ctx.fillStyle = 'rgba(0,0,0,' + (f * .35) + ')'; ctx.fillRect(x, y, TS, TS);
+      ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = 2;
+      const n = Math.ceil(f * 4);
+      for (let k = 0; k < n; k++) {
+        const a = hash(mineTgt.tx, mineTgt.ty, k + 60) * 6.28;
+        ctx.beginPath(); ctx.moveTo(x + TS / 2, y + TS / 2);
+        ctx.lineTo(x + TS / 2 + Math.cos(a) * 20, y + TS / 2 + Math.sin(a) * 20); ctx.stroke();
+      }
+    }
+
+    drawMiner(t);
+    for (const d of debris) {
+      ctx.globalAlpha = Math.max(0, Math.min(1, d.life * 2));
+      ctx.fillStyle = d.c; ctx.fillRect(d.x - 3, d.y - 3, 6, 6);
+    }
+    ctx.globalAlpha = 1;
+    drawFloats();
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const sx = (W / 2 + (miner.x - cam.x) * Z) * DPR, sy = (H / 2 + (miner.y - cam.y) * Z) * DPR;
+    const rad = 230 * Z * DPR;
+    const g = ctx.createRadialGradient(sx, sy, rad * .12, sx, sy, rad);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(.55, 'rgba(0,0,0,.22)'); g.addColorStop(1, 'rgba(0,0,0,.84)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, cv.width, cv.height);
+
+    const dxl = lx + TS / 2 - miner.x, dyl = ly + TS / 2 - miner.y, dl = Math.hypot(dxl, dyl);
+    if (dl > 220) {
+      const a = Math.atan2(dyl, dxl), r0 = 84 * DPR;
+      ctx.save(); ctx.translate(sx + Math.cos(a) * r0, sy + Math.sin(a) * r0); ctx.rotate(a);
+      ctx.fillStyle = 'rgba(243,234,210,.85)';
+      ctx.beginPath(); ctx.moveTo(10 * DPR, 0); ctx.lineTo(-6 * DPR, -7 * DPR); ctx.lineTo(-6 * DPR, 7 * DPR); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  if (loadLocal()) toast('Прогресс загружен.');
+
+  // ---------- loop ----------
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(.05, (now - last) / 1000); last = now;
+    const t = now / 1000;
+    if (!busy) {
+      if (scene === 'island') updateIsland(dt, now);
+      else if (scene === 'dive') updateDive(dt, t);
+      else if (scene === 'mine') updateMine(dt, t);
+      else if (scene === 'home') updateHome(dt);
+      else updateSea(dt, t);
+      updateSurvival(dt, t);
+      advanceEnv(dt);
+    }
+    if (scene === 'island') drawIsland(t);
+    else if (scene === 'dive') drawDive(t);
+    else if (scene === 'mine') drawMine(t);
+    else if (scene === 'home') drawHome(t);
+    else drawSea(t);
+    if (!$('furnaceUI').hidden && now - lastFurnRender > 450) { lastFurnRender = now; renderFurnace(); }
+    const lbl = (scene === 'sea' && inv.ship) ? 'Пушка' : 'Удар';
+    if ($('attackBtn').textContent !== lbl) $('attackBtn').textContent = lbl;
+    updateBars();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
